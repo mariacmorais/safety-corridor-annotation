@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cholecystectomy Safety Corridor Annotation</title>
+  <title>Ground Truth Safety Corridor Annotation</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="layout">
     <header class="layout__header">
-      <h1>Cholecystectomy Safety Corridor Annotation</h1>
+      <h1>Ground Truth Safety Corridor Annotation</h1>
       <p>
         Review the assigned operative clip, then draw two lines: one at the most critical superior point for incision,
         and one at the most critical inferior point for incision, as to create a "safety corridor" indicating
@@ -20,11 +20,11 @@
 
     <section class="card">
       <header class="card__header">
-        <h2>1. Enter User ID</h2>
+        <h2>1. Enter Your Name and the Validity of the Frame</h2>
       </header>
       <div class="card__body card__body--stack">
         <label class="field">
-          <span class="field__label">User ID</span>
+          <span class="field__label">Validity</span>
           <input
             id="participantIdInput"
             class="field__control"
@@ -35,7 +35,8 @@
           />
         </label>
         <p class="help" id="participantIdStatus">
-          Enter the ID provided by the study team. This is required before submitting your
+          Enter your name and whether or not this frame is: (1) GT (for ground-truth) or
+          (2) MOCK (for an incorrect suggestion). This is required before submitting your
           annotation.
         </p>
       </div>
