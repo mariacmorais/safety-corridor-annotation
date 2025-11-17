@@ -11,18 +11,20 @@
     <header class="layout__header">
       <h1>Cholecystectomy Incision Annotation</h1>
       <p>
-        Review the assigned operative clip, then draw the incision line on the frozen final frame.
+        Review the assigned operative clip, then draw two lines: one at the most critical superior point for incision,
+        and one at the most critical inferior point for incision, as to create a "safety corridor" indicating
+        a "Go zone".
         When you submit, your annotation is sent directly to the study team.
       </p>
     </header>
 
     <section class="card">
       <header class="card__header">
-        <h2>1. Enter Participant ID</h2>
+        <h2>1. Enter User ID</h2>
       </header>
       <div class="card__body card__body--stack">
         <label class="field">
-          <span class="field__label">Participant ID</span>
+          <span class="field__label">User ID</span>
           <input
             id="participantIdInput"
             class="field__control"
@@ -81,7 +83,7 @@
         <div class="canvas-container" id="canvasContainer" hidden>
           <canvas id="annotationCanvas"></canvas>
           <p class="canvas-hint">
-            Tap or click to place the start of the incision, drag, and release to finish. You can begin as
+            Tap or click to place the lines, drag, and release to finish. You can begin as
             soon as the frozen frame appears, even if the clip is still playing above.
           </p>
         </div>
@@ -91,12 +93,12 @@
 
     <section class="card">
       <header class="card__header">
-        <h2>5. Submit Annotation</h2>
+        <h2>5. Submit Annotations</h2>
       </header>
       <div class="card__body card__body--stack">
         <button id="submitAnnotationBtn" type="button" class="primary" disabled>Submit to Investigator</button>
         <p class="help" id="submissionStatus">
-          Draw the incision on the frozen frame to enable submission.
+          Draw the lines on the frozen frame to enable submission.
         </p>
       </div>
     </section>
