@@ -25,7 +25,7 @@ const annotationCtx = annotationCanvas.getContext("2d");
 
 let frameCaptured = false;
 let currentClip = null;
-let activeLine = null;
+let activeLine = [];
 let pointerDown = false;
 let latestPayload = null;
 let submissionInFlight = false;
@@ -439,24 +439,25 @@ function getPointerPosition(evt) {
   return { x, y };
 }
 
-function drawLine(line) {
+function drawLines(lines) {
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  if (!line) return;
-  annotationCtx.strokeStyle = "#38bdf8";
-  annotationCtx.lineWidth = Math.max(4, annotationCanvas.width * 0.004);
-  annotationCtx.lineCap = "round";
-  annotationCtx.beginPath();
-  annotationCtx.moveTo(line.start.x, line.start.y);
-  annotationCtx.lineTo(line.end.x, line.end.y);
-  annotationCtx.stroke();
+  lines.forEach((line) => {
+    annotationCtx.strokeStyle = "#38bdf8";
+    annotationCtx.lineWidth = Math.max(4, annotationCanvas.width * 0.004);
+    annotationCtx.lineCap = "round";
+    annotationCtx.beginPath();
+    annotationCtx.moveTo(line.start.x, line.start.y);
+    annotationCtx.lineTo(line.end.x, line.end.y);
+    annotationCtx.stroke();
 
-  annotationCtx.fillStyle = "#0ea5e9";
-  annotationCtx.beginPath();
-  annotationCtx.arc(line.start.x, line.start.y, annotationCtx.lineWidth, 0, Math.PI * 2);
-  annotationCtx.fill();
-  annotationCtx.beginPath();
-  annotationCtx.arc(line.end.x, line.end.y, annotationCtx.lineWidth, 0, Math.PI * 2);
-  annotationCtx.fill();
+    annotationCtx.fillStyle = "#0ea5e9";
+    annotationCtx.beginPath();
+    annotationCtx.arc(line.start.x, line.start.y, annotationCtx.lineWidth, 0, Math.PI * 2);
+    annotationCtx.fill();
+    annotationCtx.beginPath();
+    annotationCtx.arc(line.end.x, line.end.y, annotationCtx.lineWidth, 0, Math.PI * 2);
+    annotationCtx.fill();
+  });
 }
 
 function normalizeLine(line) {
@@ -473,7 +474,7 @@ function normalizeLine(line) {
 }
 
 function updateSubmissionPayload() {
-  if (!activeLine || !frameCaptured || !currentClip) {
+  if (activeLines.length === 0 || !frameCaptured || !currentClip) {
     latestPayload = null;
     submitAnnotationBtn.disabled = true;
     if (frameCaptured && submissionConfig.endpoint) {
@@ -485,20 +486,19 @@ function updateSubmissionPayload() {
   }
 
   const frameTime = capturedFrameTimeValue;
-  const normalizedLine = normalizeLine(activeLine);
-  const lengthPixels = Math.hypot(
-    activeLine.end.x - activeLine.start.x,
-    activeLine.end.y - activeLine.start.y
-  );
 
-  const startPixels = {
-    x: Number(activeLine.start.x.toFixed(2)),
-    y: Number(activeLine.start.y.toFixed(2)),
-  };
-  const endPixels = {
-    x: Number(activeLine.end.x.toFixed(2)),
-    y: Number(activeLine.end.y.toFixed(2)),
-  };
+  const normalizedLines = activeLines.map(normalizeLine);
+  const incisionPixels = activeLines.map((line) => ({
+    start: {
+      x: Number(line.start.x.toFixed(2)),
+      y: Number(line.start.y.toFixed(2)),
+    },
+    end: {
+      x: Number(line.end.x.toFixed(2)),
+      y: Number(line.end.y.toFixed(2)),
+    },
+    length: Number(Math.hypot(line.end.x - line.start.x, line.end.y - line.start.y).toFixed(2)),
+  }));
 
   const filenameHint = getFilenameHint();
 
@@ -507,12 +507,8 @@ function updateSubmissionPayload() {
     clipLabel: currentClip.label,
     videoSrc: currentClip.src,
     capturedFrameTime: frameTime,
-    incision: normalizedLine,
-    incisionPixels: {
-      start: startPixels,
-      end: endPixels,
-      length: Number(lengthPixels.toFixed(2)),
-    },
+    incisions: normalizedLines,
+    incisionPixels,
     canvasSize: { width: annotationCanvas.width, height: annotationCanvas.height },
     generatedAt: new Date().toISOString(),
     participantId: participantIdValue || "",
@@ -520,6 +516,10 @@ function updateSubmissionPayload() {
   };
 
   latestPayload = payload;
+
+  // Keep rest of logic unchanged
+}
+
 
   if (!submissionConfig.endpoint) {
     submitAnnotationBtn.disabled = true;
@@ -545,7 +545,12 @@ function handlePointerDown(evt) {
     showToast("Final frame still loading. Please wait a moment before drawing.");
     return;
   }
-
+  
+if (activeLines.length >= 2) {
+    showToast("Only two lines are allowed.");
+    return;
+  }
+  
   evt.preventDefault();
   pointerDown = true;
   const start = getPointerPosition(evt);
@@ -561,22 +566,23 @@ function handlePointerMove(evt) {
 }
 
 function handlePointerUp(evt) {
-  if (!pointerDown || !activeLine) return;
+  if (!pointerDown || activeLines.length === 0) return;
   if (evt.type === "mouseleave") {
     pointerDown = false;
     return;
   }
+
   evt.preventDefault();
   pointerDown = false;
-  activeLine.end = getPointerPosition(evt);
-  drawLine(activeLine);
+  activeLines[activeLines.length - 1].end = getPointerPosition(evt);
+  drawLines(activeLines);
   clearLineBtn.disabled = false;
   annotationStatus.textContent = "Incision line recorded. Submit below.";
   updateSubmissionPayload();
 }
 
 function clearLine() {
-  activeLine = null;
+  activeLines = [];
   pointerDown = false;
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   annotationStatus.textContent =
