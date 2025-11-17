@@ -25,7 +25,10 @@ const annotationCtx = annotationCanvas.getContext("2d");
 
 let frameCaptured = false;
 let currentClip = null;
-let activeLines = [];
+// --- START CHANGES FOR MULTI-LINE ---
+let activeDrawingLine = null; // The line currently being drawn
+let completedLines = []; // Array to store finished lines (up to 2)
+// --- END CHANGES FOR MULTI-LINE ---
 let pointerDown = false;
 let latestPayload = null;
 let submissionInFlight = false;
@@ -171,7 +174,10 @@ function handleVideoError() {
 function resetAnnotationState() {
   teardownHelperVideo();
   frameCaptured = false;
-  activeLine = null;
+  // --- START CHANGES FOR MULTI-LINE ---
+  activeDrawingLine = null;
+  completedLines = [];
+  // --- END CHANGES FOR MULTI-LINE ---
   pointerDown = false;
   latestPayload = null;
   submissionInFlight = false;
@@ -183,9 +189,11 @@ function resetAnnotationState() {
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
   if (submissionConfig.endpoint) {
+    // --- START CHANGES FOR MULTI-LINE ---
     submissionStatus.textContent = participantIdValue
-      ? "Draw the incision on the frozen frame to enable submission."
+      ? "Draw two incisions on the frozen frame to enable submission."
       : "Enter your participant ID above before submitting.";
+    // --- END CHANGES FOR MULTI-LINE ---
   } else {
     submissionStatus.textContent =
       "Investigator submission endpoint not configured. Update clip-config.js.";
@@ -308,8 +316,10 @@ function captureFrameImage(source, frameTimeValue) {
 
   frameCaptured = true;
   canvasContainer.hidden = false;
+  // --- START CHANGES FOR MULTI-LINE ---
   annotationStatus.textContent =
-    "Final frame ready. Review the clip above and draw your incision when ready.";
+    "Final frame ready. Review the clip above and draw your two incisions when ready.";
+  // --- END CHANGES FOR MULTI-LINE ---
   if (firstCapture) {
     if (video.paused) {
       videoStatus.textContent = "Final frame captured. Replay the clip if you need another look.";
@@ -388,8 +398,10 @@ function handleVideoTimeUpdate() {
     if (!success) {
       return;
     }
+    // --- START CHANGES FOR MULTI-LINE ---
     annotationStatus.textContent =
-      "Final frame ready. Review the clip above and draw your incision when ready.";
+      "Final frame ready. Review the clip above and draw your two incisions when ready.";
+    // --- END CHANGES FOR MULTI-LINE ---
   }
 }
 
@@ -397,14 +409,19 @@ function handleReplay() {
   if (!currentClip) return;
   annotationStatus.textContent =
     "Final frame remains below. Review the clip again and adjust your line if needed.";
-  activeLine = null;
+  // --- START CHANGES FOR MULTI-LINE ---
+  activeDrawingLine = null;
+  completedLines = [];
+  // --- END CHANGES FOR MULTI-LINE ---
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
   if (submissionConfig.endpoint) {
+    // --- START CHANGES FOR MULTI-LINE ---
     submissionStatus.textContent = participantIdValue
-      ? "Draw the incision on the frozen frame to enable submission."
+      ? "Draw two incisions on the frozen frame to enable submission."
       : "Enter your participant ID above before submitting.";
+    // --- END CHANGES FOR MULTI-LINE ---
   } else {
     submissionStatus.textContent =
       "Investigator submission endpoint not configured. Update clip-config.js.";
@@ -439,28 +456,42 @@ function getPointerPosition(evt) {
   return { x, y };
 }
 
-
-function drawLines(lines) {
+function drawLine() {
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  lines.forEach((line) => {
+  
+  // --- START CHANGES FOR MULTI-LINE ---
+  const linesToDraw = [...completedLines];
+  if (activeDrawingLine) {
+    linesToDraw.push(activeDrawingLine);
+  }
+
+  linesToDraw.forEach(line => {
+    if (!line) return;
+    
     annotationCtx.strokeStyle = "#38bdf8";
     annotationCtx.lineWidth = Math.max(4, annotationCanvas.width * 0.004);
     annotationCtx.lineCap = "round";
+    
+    // Draw the line segment
     annotationCtx.beginPath();
     annotationCtx.moveTo(line.start.x, line.start.y);
     annotationCtx.lineTo(line.end.x, line.end.y);
     annotationCtx.stroke();
 
     annotationCtx.fillStyle = "#0ea5e9";
+    
+    // Draw start circle
     annotationCtx.beginPath();
     annotationCtx.arc(line.start.x, line.start.y, annotationCtx.lineWidth, 0, Math.PI * 2);
     annotationCtx.fill();
+    
+    // Draw end circle
     annotationCtx.beginPath();
     annotationCtx.arc(line.end.x, line.end.y, annotationCtx.lineWidth, 0, Math.PI * 2);
     annotationCtx.fill();
   });
+  // --- END CHANGES FOR MULTI-LINE ---
 }
-
 
 function normalizeLine(line) {
   return {
@@ -475,34 +506,49 @@ function normalizeLine(line) {
   };
 }
 
-
 function updateSubmissionPayload() {
-  if (activeLines.length === 0 || !frameCaptured || !currentClip) {
+  // --- START CHANGES FOR MULTI-LINE ---
+  // Require exactly two lines to enable submission
+  if (completedLines.length !== 2 || !frameCaptured || !currentClip) {
     latestPayload = null;
     submitAnnotationBtn.disabled = true;
     if (frameCaptured && submissionConfig.endpoint) {
       submissionStatus.textContent = participantIdValue
-        ? "Draw the incision and release to submit."
+        ? `Draw exactly two incisions on the frozen frame (${completedLines.length} drawn).`
         : "Enter your participant ID above before submitting.";
     }
     return;
   }
-
+  
   const frameTime = capturedFrameTimeValue;
+  
+  const incisionDetails = completedLines.map(line => {
+      const lengthPixels = Math.hypot(
+        line.end.x - line.start.x,
+        line.end.y - line.start.y
+      );
 
-  const normalizedLines = activeLines.map(normalizeLine);
-  const incisionPixels = activeLines.map((line) => ({
-    start: {
-      x: Number(line.start.x.toFixed(2)),
-      y: Number(line.start.y.toFixed(2)),
-    },
-    end: {
-      x: Number(line.end.x.toFixed(2)),
-      y: Number(line.end.y.toFixed(2)),
-    },
-    length: Number(Math.hypot(line.end.x - line.start.x, line.end.y - line.start.y).toFixed(2)),
-  }));
-
+      const startPixels = {
+        x: Number(line.start.x.toFixed(2)),
+        y: Number(line.start.y.toFixed(2)),
+      };
+      const endPixels = {
+        x: Number(line.end.x.toFixed(2)),
+        y: Number(line.end.y.toFixed(2)),
+      };
+      
+      return {
+          normalized: normalizeLine(line),
+          pixels: {
+              start: startPixels,
+              end: endPixels,
+              length: Number(lengthPixels.toFixed(2)),
+          }
+      };
+  });
+  
+  const normalizedIncisionLines = incisionDetails.map(d => d.normalized);
+  
   const filenameHint = getFilenameHint();
 
   const payload = {
@@ -510,13 +556,16 @@ function updateSubmissionPayload() {
     clipLabel: currentClip.label,
     videoSrc: currentClip.src,
     capturedFrameTime: frameTime,
-    incisions: normalizedLines,
-    incisionPixels,
+    // Store array of normalized lines
+    incisions: normalizedIncisionLines,
+    // Store array of detailed information (normalized + pixels)
+    incisionDetails: incisionDetails, 
     canvasSize: { width: annotationCanvas.width, height: annotationCanvas.height },
     generatedAt: new Date().toISOString(),
     participantId: participantIdValue || "",
     filenameHint,
   };
+  // --- END CHANGES FOR MULTI-LINE ---
 
   latestPayload = payload;
 
@@ -539,30 +588,87 @@ function updateSubmissionPayload() {
   submissionStatus.textContent = "Ready to submit. Tap the button to send your annotation.";
 }
 
-
-
 function handlePointerDown(evt) {
   if (!frameCaptured) {
     showToast("Final frame still loading. Please wait a moment before drawing.");
     return;
   }
-
-  if (activeLines.length >= 2) {
-    showToast("Only two lines are allowed.");
-    return;
+  
+  // --- START CHANGES FOR MULTI-LINE ---
+  if (completedLines.length >= 2) {
+      showToast("Two incision lines already drawn. Tap 'Clear Line(s)' to restart.");
+      return;
   }
+  // --- END CHANGES FOR MULTI-LINE ---
 
   evt.preventDefault();
   pointerDown = true;
   const start = getPointerPosition(evt);
-  activeLines.push({ start, end: start });
-  drawLines(activeLines);
+  // --- START CHANGES FOR MULTI-LINE ---
+  activeDrawingLine = { start, end: start };
+  drawLine();
+  // --- END CHANGES FOR MULTI-LINE ---
 }
 
+function handlePointerMove(evt) {
+  // --- START CHANGES FOR MULTI-LINE ---
+  if (!pointerDown || !activeDrawingLine) return;
+  // --- END CHANGES FOR MULTI-LINE ---
+  evt.preventDefault();
+  // --- START CHANGES FOR MULTI-LINE ---
+  activeDrawingLine.end = getPointerPosition(evt);
+  drawLine();
+  // --- END CHANGES FOR MULTI-LINE ---
+}
+
+function handlePointerUp(evt) {
+  // --- START CHANGES FOR MULTI-LINE ---
+  if (!pointerDown || !activeDrawingLine) return;
+  // --- END CHANGES FOR MULTI-LINE ---
+  if (evt.type === "mouseleave") {
+    pointerDown = false;
+    return;
+  }
+  evt.preventDefault();
+  pointerDown = false;
+  // --- START CHANGES FOR MULTI-LINE ---
+  activeDrawingLine.end = getPointerPosition(evt);
+  
+  // Finalize the line
+  completedLines.push(activeDrawingLine);
+  activeDrawingLine = null;
+  
+  drawLine(); // Redraw all completed lines
+  
+  clearLineBtn.disabled = false;
+  
+  if (completedLines.length === 2) {
+      annotationStatus.textContent = "Two incision lines recorded. Submit below.";
+  } else {
+      annotationStatus.textContent = `Incision line recorded. Draw ${2 - completedLines.length} more.`;
+  }
+  // --- END CHANGES FOR MULTI-LINE ---
+  updateSubmissionPayload();
+}
+
+function clearLine() {
+  // --- START CHANGES FOR MULTI-LINE ---
+  activeDrawingLine = null;
+  completedLines = [];
+  // --- END CHANGES FOR MULTI-LINE ---
+  pointerDown = false;
+  annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+  // --- START CHANGES FOR MULTI-LINE ---
+  annotationStatus.textContent =
+    "Final frame ready. Draw your two incision lines.";
+  // --- END CHANGES FOR MULTI-LINE ---
+  clearLineBtn.disabled = true;
+  updateSubmissionPayload();
+}
 
 async function submitAnnotation() {
   if (!latestPayload) {
-    showToast("Draw the incision before submitting.");
+    showToast("Draw the two incisions before submitting.");
     return;
   }
 
