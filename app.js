@@ -36,6 +36,25 @@ let capturedFrameTimeValue = 0;
 let helperVideo = null;
 let helperSeekAttempted = false;
 
+function collectFormDataAsCSV() {
+  const name = document.getElementById("participantIdInput")?.value.trim() || "";
+  const institution = document.getElementById("institutionInput")?.value.trim() || "";
+  const specialty = document.getElementById("specialtyInput")?.value.trim() || "";
+  const years_in_practice = document.getElementById("practiceInput")?.value.trim() || "";
+  const case_volume = document.getElementById("volumeInput")?.value.trim() || "";
+  const board = document.querySelector('input[name="q3"]:checked')?.value || "";
+  const parkland = document.querySelector('input[name="q1"]:checked')?.value || "";
+  const nassar = document.querySelector('input[name="q2"]:checked')?.value || "";
+
+  const clipId = currentClip?.id || "";
+  const timestamp = new Date().toISOString();
+
+  const csvHeader = "Name,Institution,ClipID,Parkland,Nassar,SubmittedAt\n";
+  const csvRow = `"${name}","${institution}","${clipId}","${parkland}","${nassar}","${timestamp}"\n`;
+
+  return csvHeader + csvRow;
+}
+
 function showToast(message) {
   const toast = toastTemplate.content.firstElementChild.cloneNode(true);
   toast.textContent = message;
