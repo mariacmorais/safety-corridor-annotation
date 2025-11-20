@@ -151,14 +151,30 @@ body {
 .canvas-container {
   position: relative;
   display: grid;
+  /* Create a single grid area named "stack" */
+  grid-template-areas: "stack"; 
   gap: 0.5rem;
 }
 
 .canvas-container canvas {
+  /* Force both canvases to occupy the same space */
+  grid-area: stack;
   width: 100%;
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   touch-action: none;
+}
+
+/* Ensure the drawing layer sits on top */
+#annotationCanvas {
+  z-index: 10;
+  position: relative;
+}
+
+/* Ensure the hints/text sit below the stack, not inside the stack area */
+.canvas-container p {
+  /* Moving hint text out of the stack area so it appears below */
+  grid-row: 2; 
 }
 
 .canvas-hint {
