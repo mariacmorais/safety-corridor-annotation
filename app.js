@@ -719,16 +719,26 @@ async function submitAnnotation() {
 
   const filenameHint = getFilenameHint();
   const additionalFields = buildAdditionalFields(filenameHint);
-  let bodyWrapper;
-  if (submissionConfig.bodyWrapper === "none") {
-    bodyWrapper = { ...additionalFields, ...latestPayload };
-  } else {
-    const key =
-      typeof submissionConfig.bodyWrapper === "string" && submissionConfig.bodyWrapper
-        ? submissionConfig.bodyWrapper
-        : "annotation";
-    bodyWrapper = { ...additionalFields, [key]: latestPayload };
-  }
+  const csvContent = collectFormDataAsCSV();
+let bodyWrapper;
+const key =
+  typeof submissionConfig.bodyWrapper === "string" && submissionConfig.bodyWrapper
+    ? submissionConfig.bodyWrapper
+    : "annotation";
+
+if (submissionConfig.bodyWrapper === "none") {
+  bodyWrapper = {
+    ...additionalFields,
+    ...latestPayload,
+    csv_form_data: csvContent
+  };
+} else {
+  bodyWrapper = {
+    ...additionalFields,
+    [key]: latestPayload,
+    csv_form_data: csvContent // <-- Add CSV string as extra field
+  };
+}
 
   const fetchOptions = {
     method,
