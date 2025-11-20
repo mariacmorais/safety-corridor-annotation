@@ -419,7 +419,7 @@ function handleReplay() {
   if (submissionConfig.endpoint) {
     // --- START CHANGES FOR MULTI-LINE ---
     submissionStatus.textContent = participantIdValue
-      ? "Draw two incisions on the frozen frame to enable submission."
+      ? "Draw two lines on the frozen frame to enable submission."
       : "Enter your participant ID above before submitting.";
     // --- END CHANGES FOR MULTI-LINE ---
   } else {
