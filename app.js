@@ -310,7 +310,6 @@ function handleHelperError() {
       "Final frame will appear below once the clip finishes playing. If it does not, replay the clip.";
   }
 }
-
 function captureFrameImage(source, frameTimeValue) {
   if (!source.videoWidth || !source.videoHeight) {
     return false;
@@ -318,23 +317,30 @@ function captureFrameImage(source, frameTimeValue) {
 
   const firstCapture = !frameCaptured;
   resizeCanvases(source.videoWidth, source.videoHeight);
+  
+  // 1. Draw the image to the bottom canvas (finalFrame)
   overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
+  
+  // 2. Clear the top canvas (annotationCanvas) so it is transparent
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
 
-  try {
-    const dataUrl = finalFrameCanvas.toDataURL("image/png");
-    annotationCanvas.style.backgroundImage = `url(${dataUrl})`;
-    annotationCanvas.style.backgroundSize = "contain";
-    annotationCanvas.style.backgroundRepeat = "no-repeat";
-    annotationCanvas.style.backgroundPosition = "center";
-  } catch (error) {
-    frameCaptured = false;
-    showToast("Unable to capture frame. Serve the clip from the same origin or enable CORS.");
-    return false;
-  }
+  // --- DELETE OR COMMENT OUT THESE LINES ---
+  // try {
+  //   const dataUrl = finalFrameCanvas.toDataURL("image/png");
+  //   annotationCanvas.style.backgroundImage = `url(${dataUrl})`;
+  //   annotationCanvas.style.backgroundSize = "contain";
+  //   annotationCanvas.style.backgroundRepeat = "no-repeat";
+  //   annotationCanvas.style.backgroundPosition = "center";
+  // } catch (error) { ... }
+  // -----------------------------------------
+
+  // 3. Remove the background style clean-up
+  annotationCanvas.style.backgroundImage = ""; 
 
   frameCaptured = true;
   canvasContainer.hidden = false;
+  // ... rest of the function remains the same
+
   // --- START CHANGES FOR MULTI-LINE ---
   annotationStatus.textContent =
     "Final frame ready. Review the clip above and draw your two safety lines when ready.";
