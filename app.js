@@ -191,7 +191,7 @@ function resetAnnotationState() {
   if (submissionConfig.endpoint) {
     // --- START CHANGES FOR MULTI-LINE ---
     submissionStatus.textContent = participantIdValue
-      ? "Draw two incisions on the frozen frame to enable submission."
+      ? "Draw two lines on the frozen frame to enable submission."
       : "Enter your participant ID above before submitting.";
     // --- END CHANGES FOR MULTI-LINE ---
   } else {
@@ -318,7 +318,7 @@ function captureFrameImage(source, frameTimeValue) {
   canvasContainer.hidden = false;
   // --- START CHANGES FOR MULTI-LINE ---
   annotationStatus.textContent =
-    "Final frame ready. Review the clip above and draw your two incisions when ready.";
+    "Final frame ready. Review the clip above and draw your two safety lines when ready.";
   // --- END CHANGES FOR MULTI-LINE ---
   if (firstCapture) {
     if (video.paused) {
@@ -400,7 +400,7 @@ function handleVideoTimeUpdate() {
     }
     // --- START CHANGES FOR MULTI-LINE ---
     annotationStatus.textContent =
-      "Final frame ready. Review the clip above and draw your two incisions when ready.";
+      "Final frame ready. Review the clip above and draw your two safety lines when ready.";
     // --- END CHANGES FOR MULTI-LINE ---
   }
 }
@@ -514,7 +514,7 @@ function updateSubmissionPayload() {
     submitAnnotationBtn.disabled = true;
     if (frameCaptured && submissionConfig.endpoint) {
       submissionStatus.textContent = participantIdValue
-        ? `Draw exactly two incisions on the frozen frame (${completedLines.length} drawn).`
+        ? `Draw exactly two lines on the frozen frame (${completedLines.length} drawn).`
         : "Enter your participant ID above before submitting.";
     }
     return;
@@ -596,7 +596,7 @@ function handlePointerDown(evt) {
   
   // --- START CHANGES FOR MULTI-LINE ---
   if (completedLines.length >= 2) {
-      showToast("Two incision lines already drawn. Tap 'Clear Line(s)' to restart.");
+      showToast("Two lines already drawn. Tap 'Clear Line(s)' to restart.");
       return;
   }
   // --- END CHANGES FOR MULTI-LINE ---
@@ -643,9 +643,9 @@ function handlePointerUp(evt) {
   clearLineBtn.disabled = false;
   
   if (completedLines.length === 2) {
-      annotationStatus.textContent = "Two incision lines recorded. Submit below.";
+      annotationStatus.textContent = "Two lines recorded. Submit below.";
   } else {
-      annotationStatus.textContent = `Incision line recorded. Draw ${2 - completedLines.length} more.`;
+      annotationStatus.textContent = `Line recorded. Draw ${2 - completedLines.length} more.`;
   }
   // --- END CHANGES FOR MULTI-LINE ---
   updateSubmissionPayload();
@@ -660,7 +660,7 @@ function clearLine() {
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   // --- START CHANGES FOR MULTI-LINE ---
   annotationStatus.textContent =
-    "Final frame ready. Draw your two incision lines.";
+    "Final frame ready. Draw your two lines for the safety corridor.";
   // --- END CHANGES FOR MULTI-LINE ---
   clearLineBtn.disabled = true;
   updateSubmissionPayload();
@@ -668,7 +668,7 @@ function clearLine() {
 
 async function submitAnnotation() {
   if (!latestPayload) {
-    showToast("Draw the two incisions before submitting.");
+    showToast("Draw the two lines before submitting.");
     return;
   }
 
