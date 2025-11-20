@@ -24,7 +24,18 @@
       </header>
       <div class="card__body card__body--stack">
         <label class="field">
-          <span class="field__label">Attending Name and Institution</span>
+          <span class="field__label">Name</span>
+          <input
+            id="participantIdInput"
+            class="field__control"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="e.g., Smith"
+          />
+        </label>
+        <label class="field">
+          <span class="field__label">Institution</span>
           <input
             id="participantIdInput"
             class="field__control"
@@ -35,7 +46,7 @@
           />
         </label>
         <p class="help" id="participantIdStatus">
-          Enter your last name. This is required before submitting your
+          Enter your last name and affiliated institution. This is required before submitting your
           annotation.
         </p>
       </div>
@@ -90,6 +101,34 @@
           <p class="help" id="annotationStatus">The final frame appears below shortly. You can keep watching while it prepares.</p>
       </div>
     </section>
+
+    <section class="card">
+  <header class="card__header">
+    <h2>7. Difficulty of the Case</h2>
+  </header>
+  <div class="card__body card__body--stack">
+    <div class="field">
+      <span class="field__label">1. Enter the Pakrland Score based on your impressions of the clip/frame</span>
+      <label><input type="radio" name="q1" value="1" /> 1. Normal appearing gallbladder (“robin's egg blue”). No adhesions present. Completely normal gallbladder</label><br />
+      <label><input type="radio" name="q1" value="2" /> 2. Minor adhesions at neck, otherwise normal gallbladder. Adhesions restricted to the neck or lower of the gallbladder</label><br />
+      <label><input type="radio" name="q1" value="3" /> 3. Presence of ANY of the following: Hyperemia, pericholecystic fluid, adhesions to the body, distended gallbladder</label><br />
+      <label><input type="radio" name="q1" value="4" /> 4. Presence of ANY of the following: Adhesions obscuring majority of gallbladder, Grade I-III with abnormal liver anatomy,
+        intrahepatic gallbladder, or impacted stone (Mirrizi)</label><br />
+      <label><input type ="radio"name="q1"value="5"/>  Presence of ANY of the following: Perforation, necrosis, inability to visualize the gallbladder due to adhesions</label>
+    </div>
+
+    <div class="field" style="margin-top: 1rem;">
+      <span class="field__label">2. Enter the Nassar Score based on your impressions of the clip/frame</span>
+      <label><input type="radio" name="q2" value="I" /> I. Gallbladder: floppy, non-adherent. Cystic pedicle: thin and clear.Adhesions: simple up to the neck/Hartmann’s pouch.</label><br />
+      <label><input type="radio" name="q2" value="II" /> II. Gallbladder: mucocele, packed with stones. Cystic pedicle: fat laden. Adhesions: simple up to the body.</label><br />
+      <label><input type="radio" name="q2" value="III" /> III. Gallbladder: deep fossa, acute cholecystitis, contracted, fibrosis, Hartmann’s adherent to CBD, impaction.
+        Cystic pedicle: abnormal anatomy or cystic duct—short, dilated or obscured. Adhesions: dense up to fundus; involving hepatic flexure or duodenum.</label><br />
+      <label><input type="radio" name="q2" value="IV" /> IV. Gallbladder: completely obscured, empyema, gangrene, mass. Cystic pedicle: impossible to clarify.
+        Adhesions: dense, fibrosis, wrapping the gallbladder, duodenum or hepatic flexure difficult to separate.</label><br />
+      <label><input type="radio" name="q2" value="V" /> V. Mirizzi Syndrome type 2 or higher, cholecysto-cutaneous, cholecysto-duodenal or cholecysto-colic fistula.</label>
+    </div>
+  </div>
+</section>
 
      <section class="card">
       <header class="card__header">
