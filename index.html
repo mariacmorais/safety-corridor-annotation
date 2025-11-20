@@ -20,7 +20,7 @@
 
     <section class="card">
       <header class="card__header">
-        <h2>1. Enter Your Last Name and Institution</h2>
+        <h2>1. Identification</h2>
       </header>
       <div class="card__body card__body--stack">
         <label class="field">
@@ -37,7 +37,7 @@
         <label class="field">
           <span class="field__label">Institution</span>
           <input
-            id="participantInstitutionInput"
+            id="institutionInput"
             class="field__control"
             type="text"
             inputmode="text"
@@ -45,8 +45,47 @@
             placeholder="e.g., XYZ Hospital"
           />
         </label>
+        <label class="field">
+          <span class="field__label">Specialty</span>
+          <input
+            id="specialtyInput"
+            class="field__control"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="e.g., MIS, HPB"
+          />
+        </label>
+        <label class="field">
+          <span class="field__label">How many years of pracitce?</span>
+          <input
+            id="practiceInput"
+            class="field__control"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="Enter a number only"
+          />
+        </label>
+        <label class="field">
+          <span class="field__label">Approximately how many cholecystectomies do you perform each year?</span>
+          <input
+            id="volumeInput"
+            class="field__control"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="Enter a number only"
+          />
+        </label>
+    <div class="card__body card__body--stack">
+    <div class="field">
+      <span class="field__label">Are you board-certified?</span>
+      <label><input type="radio" name="q3" value="1" /> Yes</label><br />
+      <label><input type="radio" name="q3" value="2" /> No</label>
+    </div>
         <p class="help" id="participantIdStatus">
-          Enter your last name and affiliated institution. This is required before submitting your
+          Enter your information. This is required before submitting your
           annotation.
         </p>
       </div>
