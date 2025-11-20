@@ -1,6 +1,6 @@
 # Ground Truth Safety Corridor Annotation Tool
 
-This project is a web-based annotation tool designed for surgical researchers to review operative clips and annotate critical incision points — forming a "safety corridor" for cholecystectomy procedures. The tool also collects metadata from surgeons (e.g. name, institution, Parkland/Nassar scores) and submits all data securely to a Formspree endpoint.
+This project is a web-based annotation tool designed for surgical researchers to review operative clips and annotate critical incision points, forming a "safety corridor" for cholecystectomy procedures. The tool also collects metadata from surgeons (e.g. name, institution, Parkland/Nassar scores) and submits all data securely to a Formspree endpoint.
 
 ---
 
