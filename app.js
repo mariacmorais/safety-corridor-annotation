@@ -245,6 +245,7 @@ function teardownHelperVideo() {
   }
   helperVideo.removeAttribute("src");
   helperVideo.load();
+  // Remove from DOM
   helperVideo.remove();
   helperVideo = null;
   helperSeekAttempted = false;
@@ -262,6 +263,18 @@ function prepareHelperVideo() {
   helperVideo.muted = true;
   helperVideo.setAttribute("playsinline", "");
   helperVideo.setAttribute("webkit-playsinline", "");
+  
+  // MOBILE SAFARI FIX: 
+  // Append video to DOM so the browser actually processes it.
+  // Hide it completely using CSS styles.
+  helperVideo.style.position = "absolute";
+  helperVideo.style.width = "1px";
+  helperVideo.style.height = "1px";
+  helperVideo.style.opacity = "0";
+  helperVideo.style.zIndex = "-1000";
+  helperVideo.style.pointerEvents = "none";
+  document.body.appendChild(helperVideo);
+
   helperVideo.addEventListener("loadedmetadata", handleHelperLoadedMetadata);
   helperVideo.addEventListener("seeked", handleHelperSeeked);
   helperVideo.addEventListener("timeupdate", handleHelperTimeUpdate);
@@ -276,7 +289,8 @@ function handleHelperLoadedMetadata() {
   }
   helperSeekAttempted = true;
   const duration = helperVideo.duration;
-  const offset = duration > 0.5 ? 0.04 : Math.max(duration * 0.5, 0.01);
+  // Cap the seek target to slightly before the end
+  const offset = duration > 0.5 ? 0.1 : Math.max(duration * 0.5, 0.01);
   const target = Math.max(duration - offset, 0);
   try {
     helperVideo.currentTime = target;
@@ -324,14 +338,13 @@ function captureFrameImage(source, frameTimeValue) {
   const firstCapture = !frameCaptured;
   resizeCanvases(source.videoWidth, source.videoHeight);
   
-  // --- FIX FOR MOBILE SAFARI ---
   // 1. Draw the image directly to the BOTTOM canvas
   overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
   
   // 2. Clear the TOP canvas so it is transparent for drawing
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
 
-  // 3. Ensure we don't try to set the image as a background (which crashes mobile)
+  // 3. Ensure we don't try to set the image as a background
   annotationCanvas.style.backgroundImage = ""; 
 
   frameCaptured = true;
@@ -359,9 +372,11 @@ function captureFrameImage(source, frameTimeValue) {
 
 function freezeOnFinalFrame() {
   if (!frameCaptured) {
-    const captureTime = Number.isFinite(video.duration)
-      ? video.duration
-      : video.currentTime || 0;
+    // MOBILE FIX: Do not capture exact duration, as it may be a black 'end' frame.
+    // Subtract 0.1 seconds to catch the last visible image.
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    const captureTime = duration > 0.1 ? duration - 0.1 : (video.currentTime || 0);
+
     const success = captureFrameImage(video, captureTime);
     if (!success) {
       return;
@@ -413,9 +428,11 @@ function handleVideoTimeUpdate() {
     return;
   }
 
+  // MOBILE FIX: Ensure we don't wait until the VERY end frame
   const remaining = duration - video.currentTime;
   if (remaining <= 0.25) {
-    const success = captureFrameImage(video, duration);
+    // Capture slightly before the end
+    const success = captureFrameImage(video, duration - 0.1);
     if (!success) {
       return;
     }
