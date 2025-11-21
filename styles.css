@@ -150,37 +150,38 @@ body {
 
 .canvas-container {
   position: relative;
+  width: 100%;
   display: grid;
-  /* Create a single grid area named "stack" */
-  grid-template-areas: "stack"; 
   gap: 0.5rem;
 }
 
 .canvas-container canvas {
-  /* Force both canvases to occupy the same space */
-  grid-area: stack;
   width: 100%;
+  height: auto;
+  display: block;
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   touch-action: none;
 }
 
-/* Ensure the drawing layer sits on top */
-#annotationCanvas {
-  z-index: 10;
-  position: relative;
+#finalFrame {
+  grid-column: 1;
+  grid-row: 1;
+  z-index: 1;
 }
 
-/* Ensure the hints/text sit below the stack, not inside the stack area */
-.canvas-container p {
-  /* Moving hint text out of the stack area so it appears below */
-  grid-row: 2; 
+#annotationCanvas {
+  grid-column: 1;
+  grid-row: 1;
+  z-index: 10;
 }
 
 .canvas-hint {
   margin: 0;
   font-size: 0.9rem;
   color: var(--text-muted);
+  grid-column: 1;
+  grid-row: 2;
 }
 
 .help {
@@ -267,21 +268,5 @@ button:not(:disabled):active {
 
   button {
     width: 100%;
-  }
-}
-
-
-@media (max-width: 720px) {
-  .canvas-container canvas {
-    width: 100vw !important;
-    height: auto !important;
-    max-width: 100vw;
-    display: block;
-  }
-
-  #finalFrame, #annotationCanvas {
-    display: block;
-    position: relative;
-    z-index: 1;
   }
 }
