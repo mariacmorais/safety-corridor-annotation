@@ -25,7 +25,7 @@ const annotationCtx = annotationCanvas.getContext("2d");
 
 // State Variables
 let frameCaptured = false;
-let finalFrameBuffered = false; // NEW: Tracks if we have a valid image waiting
+let finalFrameBuffered = false; // Tracks if we have a valid image waiting
 let currentClip = null;
 let activeDrawingLine = null; 
 let completedLines = []; 
@@ -218,7 +218,7 @@ function bufferFrame(source) {
   // Draw directly to the bottom canvas
   overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
   
-  // Clear top canvas to ensure transparency
+  // Clear top canvas to ensure transparency (clean slate for drawing later)
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   
   // Mobile safety: ensure no background image
@@ -228,7 +228,7 @@ function bufferFrame(source) {
   return true;
 }
 
-// This function reveals the already-drawn canvas to the user.
+// This function locks the frame and enables interaction
 function revealCapturedFrame() {
   if (!finalFrameBuffered) return;
 
@@ -256,10 +256,16 @@ function handleVideoTimeUpdate() {
   const remaining = video.duration - video.currentTime;
 
   // ROLLING CAPTURE STRATEGY:
-  // While the video plays the last 1 second, we continuously draw the frame 
-  // to the hidden canvas. This ensures we have a valid image *before* // the video finishes and potentially turns black.
-  if (remaining <= 1.0) {
+  // We buffer and SHOW the frame during the last 3 seconds.
+  // This ensures the user sees the frame appearing before the clip ends.
+  if (remaining <= 3.0) { 
      bufferFrame(video);
+     
+     // NEW: Unhide immediately so user sees it updating in real-time
+     if (canvasContainer.hidden) {
+         canvasContainer.hidden = false;
+         annotationStatus.textContent = "Final frame appearing below...";
+     }
   }
 }
 
@@ -269,12 +275,11 @@ function handleVideoEnded() {
   video.controls = true;
   video.setAttribute("controls", "");
 
-  // If our rolling capture worked, we already have the image. Show it.
+  // If our rolling capture worked, we already have the image. Lock it now.
   if (finalFrameBuffered) {
     revealCapturedFrame();
   } else {
-    // Fallback: If user scrubbed to the end immediately, we might not have buffered yet.
-    // Seek back slightly to ensure we don't capture a black "end" frame.
+    // Fallback for immediate scrubbing to end
     const target = Math.max(0, video.duration - 0.1);
     
     videoStatus.textContent = "Capturing final frame...";
@@ -297,7 +302,6 @@ function handleVideoLoaded() {
   video.controls = true;
   video.setAttribute("controls", "");
   video.play().catch(() => {
-    // Auto-play failed (expected on some browsers), wait for user tap
     videoStatus.textContent = "Clip loaded. Press play to begin.";
   });
 }
@@ -331,7 +335,6 @@ function handleReplay() {
   
   updateSubmissionPayload();
   
-  // Reset UI texts
   if (submissionConfig.endpoint) {
     submissionStatus.textContent = participantIdValue
       ? "Draw two lines on the frozen frame to enable submission."
