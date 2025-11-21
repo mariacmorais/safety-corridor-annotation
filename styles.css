@@ -161,6 +161,7 @@ body {
   /* Both canvases (image and drawing) occupy the "stack" area */
   grid-area: stack;
   width: 100%;
+  height: auto; /* REQUIRED for correct aspect ratio scaling in grid */
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   touch-action: none;
