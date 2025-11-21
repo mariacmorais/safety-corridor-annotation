@@ -49,7 +49,7 @@ function collectFormDataAsCSV() {
   const timestamp = new Date().toISOString();
 
   const csvHeader = "Name,Institution,Specialty,YearsInPractice,CaseVolume,BoardCertified,Parkland,Nassar,ClipID,SubmittedAt\n";
-  const csvRow = `"${name}","${institution}","${specialty}","${years_in_practice}","${case_volume}","${board}","${parkland}","${nassar}","${clipId}","${timestamp}"\n`;
+  const csvRow = \`\${name},\${institution},\${specialty},\${years_in_practice},\${case_volume},\${board},\${parkland},\${nassar},\${clipId},\${timestamp}\n\`;
 
   return csvHeader + csvRow;
 }
