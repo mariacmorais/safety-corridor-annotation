@@ -25,10 +25,8 @@ const annotationCtx = annotationCanvas.getContext("2d");
 
 let frameCaptured = false;
 let currentClip = null;
-// --- START CHANGES FOR MULTI-LINE ---
-let activeDrawingLine = null; // The line currently being drawn
-let completedLines = []; // Array to store finished lines (up to 2)
-// --- END CHANGES FOR MULTI-LINE ---
+let activeDrawingLine = null;
+let completedLines = [];
 let pointerDown = false;
 let latestPayload = null;
 let submissionInFlight = false;
@@ -178,10 +176,10 @@ function handleVideoError() {
     message += ` (Configured source: ${currentClip.src})`;
     if (looksLikeLocalPath(currentClip.src)) {
       message +=
-        " — this looks like a local file path. Upload the video to your hosting provider (e.g., GitHub Pages, CDN) and reference the hosted HTTPS URL instead.";
+        " – this looks like a local file path. Upload the video to your hosting provider (e.g., GitHub Pages, CDN) and reference the hosted HTTPS URL instead.";
     } else if (looksLikeGithubBlob(currentClip.src)) {
       message +=
-        " — this points to the GitHub repository viewer. Use the GitHub Pages URL or the raw file URL (https://raw.githubusercontent.com/…) so the browser can load the actual video.";
+        " – this points to the GitHub repository viewer. Use the GitHub Pages URL or the raw file URL (https://raw.githubusercontent.com/…) so the browser can load the actual video.";
     }
   }
   videoStatus.textContent = message;
@@ -193,34 +191,21 @@ function handleVideoError() {
 function resetAnnotationState() {
   teardownHelperVideo();
   frameCaptured = false;
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine = null;
   completedLines = [];
-  // --- END CHANGES FOR MULTI-LINE ---
   pointerDown = false;
   latestPayload = null;
   submissionInFlight = false;
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   overlayCtx.clearRect(0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
-  try {
-    const dataUrl = finalFrameCanvas.toDataURL("image/png");
-    annotationCanvas.style.backgroundImage = `url(${dataUrl})`;
-    annotationCanvas.style.backgroundSize = "contain";
-    annotationCanvas.style.backgroundRepeat = "no-repeat";
-    annotationCanvas.style.backgroundPosition = "center";
-  } catch (err) {
-    annotationCanvas.style.backgroundImage = "none";
-  }
   annotationStatus.textContent =
     "Final frame will appear below shortly. You can keep watching the clip while it prepares.";
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
   if (submissionConfig.endpoint) {
-    // --- START CHANGES FOR MULTI-LINE ---
     submissionStatus.textContent = participantIdValue
       ? "Draw two lines on the frozen frame to enable submission."
       : "Enter your participant ID above before submitting.";
-    // --- END CHANGES FOR MULTI-LINE ---
   } else {
     submissionStatus.textContent =
       "Investigator submission endpoint not configured. Update clip-config.js.";
@@ -318,6 +303,7 @@ function handleHelperError() {
       "Final frame will appear below once the clip finishes playing. If it does not, replay the clip.";
   }
 }
+
 function captureFrameImage(source, frameTimeValue) {
   if (!source.videoWidth || !source.videoHeight) {
     return false;
@@ -326,41 +312,18 @@ function captureFrameImage(source, frameTimeValue) {
   const firstCapture = !frameCaptured;
   resizeCanvases(source.videoWidth, source.videoHeight);
   
-  // 1. Draw the image to the bottom canvas (finalFrame)
+  // Draw the video frame to the finalFrameCanvas
   overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
   
-  // 2. Clear the top canvas (annotationCanvas) so it is transparent
+  // Clear the annotationCanvas so it is transparent and ready for drawing
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-
-  // --- DELETE OR COMMENT OUT THESE LINES ---
-  // try {
-  //   const dataUrl = finalFrameCanvas.toDataURL("image/png");
-  //   annotationCanvas.style.backgroundImage = `url(${dataUrl})`;
-  //   annotationCanvas.style.backgroundSize = "contain";
-  //   annotationCanvas.style.backgroundRepeat = "no-repeat";
-  //   annotationCanvas.style.backgroundPosition = "center";
-  // } catch (error) { ... }
-  // -----------------------------------------
-
-  // 3. Remove the background style clean-up
-  try {
-    const dataUrl = finalFrameCanvas.toDataURL("image/png");
-    annotationCanvas.style.backgroundImage = `url(${dataUrl})`;
-    annotationCanvas.style.backgroundSize = "contain";
-    annotationCanvas.style.backgroundRepeat = "no-repeat";
-    annotationCanvas.style.backgroundPosition = "center";
-  } catch (err) {
-    annotationCanvas.style.backgroundImage = "none";
-  } 
 
   frameCaptured = true;
   canvasContainer.hidden = false;
-  // ... rest of the function remains the same
 
-  // --- START CHANGES FOR MULTI-LINE ---
   annotationStatus.textContent =
     "Final frame ready. Review the clip above and draw your two safety lines when ready.";
-  // --- END CHANGES FOR MULTI-LINE ---
+  
   if (firstCapture) {
     if (video.paused) {
       videoStatus.textContent = "Final frame captured. Replay the clip if you need another look.";
@@ -369,6 +332,7 @@ function captureFrameImage(source, frameTimeValue) {
         "Final frame captured below. You can keep watching or replay the clip when ready.";
     }
   }
+  
   replayBtn.disabled = false;
   const numericTime = Number(
     ((frameTimeValue ?? source.currentTime ?? 0) || 0).toFixed(3)
@@ -439,30 +403,24 @@ function handleVideoTimeUpdate() {
     if (!success) {
       return;
     }
-    // --- START CHANGES FOR MULTI-LINE ---
     annotationStatus.textContent =
       "Final frame ready. Review the clip above and draw your two safety lines when ready.";
-    // --- END CHANGES FOR MULTI-LINE ---
   }
 }
 
 function handleReplay() {
   if (!currentClip) return;
   annotationStatus.textContent =
-    "Final frame remains below. Review the clip again and adjust your line if needed.";
-  // --- START CHANGES FOR MULTI-LINE ---
+    "Final frame remains below. Review the clip again and adjust your lines if needed.";
   activeDrawingLine = null;
   completedLines = [];
-  // --- END CHANGES FOR MULTI-LINE ---
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
   if (submissionConfig.endpoint) {
-    // --- START CHANGES FOR MULTI-LINE ---
     submissionStatus.textContent = participantIdValue
       ? "Draw two lines on the frozen frame to enable submission."
       : "Enter your participant ID above before submitting.";
-    // --- END CHANGES FOR MULTI-LINE ---
   } else {
     submissionStatus.textContent =
       "Investigator submission endpoint not configured. Update clip-config.js.";
@@ -500,7 +458,6 @@ function getPointerPosition(evt) {
 function drawLine() {
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   
-  // --- START CHANGES FOR MULTI-LINE ---
   const linesToDraw = [...completedLines];
   if (activeDrawingLine) {
     linesToDraw.push(activeDrawingLine);
@@ -513,7 +470,6 @@ function drawLine() {
     annotationCtx.lineWidth = Math.max(4, annotationCanvas.width * 0.004);
     annotationCtx.lineCap = "round";
     
-    // Draw the line segment
     annotationCtx.beginPath();
     annotationCtx.moveTo(line.start.x, line.start.y);
     annotationCtx.lineTo(line.end.x, line.end.y);
@@ -521,17 +477,14 @@ function drawLine() {
 
     annotationCtx.fillStyle = "#0ea5e9";
     
-    // Draw start circle
     annotationCtx.beginPath();
     annotationCtx.arc(line.start.x, line.start.y, annotationCtx.lineWidth, 0, Math.PI * 2);
     annotationCtx.fill();
     
-    // Draw end circle
     annotationCtx.beginPath();
     annotationCtx.arc(line.end.x, line.end.y, annotationCtx.lineWidth, 0, Math.PI * 2);
     annotationCtx.fill();
   });
-  // --- END CHANGES FOR MULTI-LINE ---
 }
 
 function normalizeLine(line) {
@@ -548,8 +501,6 @@ function normalizeLine(line) {
 }
 
 function updateSubmissionPayload() {
-  // --- START CHANGES FOR MULTI-LINE ---
-  // Require exactly two lines to enable submission
   if (completedLines.length !== 2 || !frameCaptured || !currentClip) {
     latestPayload = null;
     submitAnnotationBtn.disabled = true;
@@ -597,16 +548,13 @@ function updateSubmissionPayload() {
     clipLabel: currentClip.label,
     videoSrc: currentClip.src,
     capturedFrameTime: frameTime,
-    // Store array of normalized lines
     incisions: normalizedIncisionLines,
-    // Store array of detailed information (normalized + pixels)
-    incisionDetails: incisionDetails, 
+    incisionDetails: incisionDetails,
     canvasSize: { width: annotationCanvas.width, height: annotationCanvas.height },
     generatedAt: new Date().toISOString(),
     participantId: participantIdValue || "",
     filenameHint,
   };
-  // --- END CHANGES FOR MULTI-LINE ---
 
   latestPayload = payload;
 
@@ -635,51 +583,39 @@ function handlePointerDown(evt) {
     return;
   }
   
-  // --- START CHANGES FOR MULTI-LINE ---
   if (completedLines.length >= 2) {
       showToast("Two lines already drawn. Tap 'Clear Line(s)' to restart.");
       return;
   }
-  // --- END CHANGES FOR MULTI-LINE ---
 
   evt.preventDefault();
   pointerDown = true;
   const start = getPointerPosition(evt);
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine = { start, end: start };
   drawLine();
-  // --- END CHANGES FOR MULTI-LINE ---
 }
 
 function handlePointerMove(evt) {
-  // --- START CHANGES FOR MULTI-LINE ---
   if (!pointerDown || !activeDrawingLine) return;
-  // --- END CHANGES FOR MULTI-LINE ---
   evt.preventDefault();
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine.end = getPointerPosition(evt);
   drawLine();
-  // --- END CHANGES FOR MULTI-LINE ---
 }
 
 function handlePointerUp(evt) {
-  // --- START CHANGES FOR MULTI-LINE ---
   if (!pointerDown || !activeDrawingLine) return;
-  // --- END CHANGES FOR MULTI-LINE ---
   if (evt.type === "mouseleave") {
     pointerDown = false;
     return;
   }
   evt.preventDefault();
   pointerDown = false;
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine.end = getPointerPosition(evt);
   
-  // Finalize the line
   completedLines.push(activeDrawingLine);
   activeDrawingLine = null;
   
-  drawLine(); // Redraw all completed lines
+  drawLine();
   
   clearLineBtn.disabled = false;
   
@@ -688,21 +624,16 @@ function handlePointerUp(evt) {
   } else {
       annotationStatus.textContent = `Line recorded. Draw ${2 - completedLines.length} more.`;
   }
-  // --- END CHANGES FOR MULTI-LINE ---
   updateSubmissionPayload();
 }
 
 function clearLine() {
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine = null;
   completedLines = [];
-  // --- END CHANGES FOR MULTI-LINE ---
   pointerDown = false;
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  // --- START CHANGES FOR MULTI-LINE ---
   annotationStatus.textContent =
     "Final frame ready. Draw your two lines for the safety corridor.";
-  // --- END CHANGES FOR MULTI-LINE ---
   clearLineBtn.disabled = true;
   updateSubmissionPayload();
 }
@@ -742,25 +673,25 @@ async function submitAnnotation() {
   const filenameHint = getFilenameHint();
   const additionalFields = buildAdditionalFields(filenameHint);
   const csvContent = collectFormDataAsCSV();
-let bodyWrapper;
-const key =
-  typeof submissionConfig.bodyWrapper === "string" && submissionConfig.bodyWrapper
-    ? submissionConfig.bodyWrapper
-    : "annotation";
+  let bodyWrapper;
+  const key =
+    typeof submissionConfig.bodyWrapper === "string" && submissionConfig.bodyWrapper
+      ? submissionConfig.bodyWrapper
+      : "annotation";
 
-if (submissionConfig.bodyWrapper === "none") {
-  bodyWrapper = {
-    ...additionalFields,
-    ...latestPayload,
-    csv_form_data: csvContent
-  };
-} else {
-  bodyWrapper = {
-    ...additionalFields,
-    [key]: latestPayload,
-    csv_form_data: csvContent // <-- Add CSV string as extra field
-  };
-}
+  if (submissionConfig.bodyWrapper === "none") {
+    bodyWrapper = {
+      ...additionalFields,
+      ...latestPayload,
+      csv_form_data: csvContent
+    };
+  } else {
+    bodyWrapper = {
+      ...additionalFields,
+      [key]: latestPayload,
+      csv_form_data: csvContent
+    };
+  }
 
   const fetchOptions = {
     method,
