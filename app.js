@@ -200,9 +200,14 @@ function resetAnnotationState() {
   pointerDown = false;
   latestPayload = null;
   submissionInFlight = false;
+  
+  // Clear both canvases
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   overlayCtx.clearRect(0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
+  
+  // Ensure we don't have any lingering background images from old logic
   annotationCanvas.style.backgroundImage = "";
+  
   annotationStatus.textContent =
     "Final frame will appear below shortly. You can keep watching the clip while it prepares.";
   clearLineBtn.disabled = true;
@@ -310,6 +315,7 @@ function handleHelperError() {
       "Final frame will appear below once the clip finishes playing. If it does not, replay the clip.";
   }
 }
+
 function captureFrameImage(source, frameTimeValue) {
   if (!source.videoWidth || !source.videoHeight) {
     return false;
@@ -318,28 +324,18 @@ function captureFrameImage(source, frameTimeValue) {
   const firstCapture = !frameCaptured;
   resizeCanvases(source.videoWidth, source.videoHeight);
   
-  // 1. Draw the image to the bottom canvas (finalFrame)
+  // --- FIX FOR MOBILE SAFARI ---
+  // 1. Draw the image directly to the BOTTOM canvas
   overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
   
-  // 2. Clear the top canvas (annotationCanvas) so it is transparent
+  // 2. Clear the TOP canvas so it is transparent for drawing
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
 
-  // --- DELETE OR COMMENT OUT THESE LINES ---
-  // try {
-  //   const dataUrl = finalFrameCanvas.toDataURL("image/png");
-  //   annotationCanvas.style.backgroundImage = `url(${dataUrl})`;
-  //   annotationCanvas.style.backgroundSize = "contain";
-  //   annotationCanvas.style.backgroundRepeat = "no-repeat";
-  //   annotationCanvas.style.backgroundPosition = "center";
-  // } catch (error) { ... }
-  // -----------------------------------------
-
-  // 3. Remove the background style clean-up
+  // 3. Ensure we don't try to set the image as a background (which crashes mobile)
   annotationCanvas.style.backgroundImage = ""; 
 
   frameCaptured = true;
   canvasContainer.hidden = false;
-  // ... rest of the function remains the same
 
   // --- START CHANGES FOR MULTI-LINE ---
   annotationStatus.textContent =
