@@ -23,18 +23,18 @@ let participantIdValue = "";
 const overlayCtx = finalFrameCanvas.getContext("2d");
 const annotationCtx = annotationCanvas.getContext("2d");
 
+// State Variables
 let frameCaptured = false;
+let finalFrameBuffered = false; // NEW: Tracks if we have a valid image waiting
 let currentClip = null;
-// --- MULTI-LINE VARIABLES ---
 let activeDrawingLine = null; 
 let completedLines = []; 
-// ----------------------------
 let pointerDown = false;
 let latestPayload = null;
 let submissionInFlight = false;
 let capturedFrameTimeValue = 0;
-let helperVideo = null;
-let helperSeekAttempted = false;
+
+// --- UTILITY FUNCTIONS ---
 
 function collectFormDataAsCSV() {
   const name = document.getElementById("participantIdInput")?.value.trim() || "";
@@ -64,6 +64,8 @@ function showToast(message) {
   });
   setTimeout(() => toast.remove(), 2800);
 }
+
+// --- CLIP MANAGEMENT ---
 
 function getClips() {
   const clips = Array.isArray(window.ANNOTATION_CLIPS) ? [...window.ANNOTATION_CLIPS] : [];
@@ -141,7 +143,10 @@ function loadSelectedClip() {
   video.removeAttribute("controls");
   video.setAttribute("playsinline", "");
   video.setAttribute("webkit-playsinline", "");
+  
+  // CRITICAL: Set crossOrigin BEFORE src to avoid tainted canvas issues
   video.crossOrigin = "anonymous";
+  
   if (currentClip.poster) {
     video.setAttribute("poster", currentClip.poster);
   } else {
@@ -152,64 +157,27 @@ function loadSelectedClip() {
   video.load();
   videoStatus.textContent = "Loading clip…";
   replayBtn.disabled = true;
-  prepareHelperVideo();
-}
-
-function looksLikeLocalPath(value) {
-  if (!value) return false;
-  const lower = value.toLowerCase();
-  return (
-    lower.startsWith("file:") ||
-    lower.startsWith("/users/") ||
-    lower.startsWith("c:\\") ||
-    lower.startsWith("\\\\")
-  );
-}
-
-function looksLikeGithubBlob(value) {
-  if (!value) return false;
-  const lower = value.toLowerCase();
-  return lower.includes("github.com") && lower.includes("/blob/");
-}
-
-function handleVideoError() {
-  let message = "Clip failed to load. Check that the src URL is correct and publicly accessible.";
-  if (currentClip?.src) {
-    message += ` (Configured source: ${currentClip.src})`;
-    if (looksLikeLocalPath(currentClip.src)) {
-      message +=
-        " — this looks like a local file path. Upload the video to your hosting provider (e.g., GitHub Pages, CDN) and reference the hosted HTTPS URL instead.";
-    } else if (looksLikeGithubBlob(currentClip.src)) {
-      message +=
-        " — this points to the GitHub repository viewer. Use the GitHub Pages URL or the raw file URL (https://raw.githubusercontent.com/…) so the browser can load the actual video.";
-    }
-  }
-  videoStatus.textContent = message;
-  showToast(message);
-  replayBtn.disabled = true;
-  teardownHelperVideo();
 }
 
 function resetAnnotationState() {
-  teardownHelperVideo();
   frameCaptured = false;
+  finalFrameBuffered = false;
   activeDrawingLine = null;
   completedLines = [];
   pointerDown = false;
   latestPayload = null;
   submissionInFlight = false;
   
-  // Clear both canvases
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   overlayCtx.clearRect(0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
   
-  // Ensure we don't have any lingering background images from old logic
   annotationCanvas.style.backgroundImage = "";
   
   annotationStatus.textContent =
     "Final frame will appear below shortly. You can keep watching the clip while it prepares.";
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
+  
   if (submissionConfig.endpoint) {
     submissionStatus.textContent = participantIdValue
       ? "Draw two lines on the frozen frame to enable submission."
@@ -221,12 +189,11 @@ function resetAnnotationState() {
   capturedFrameTimeValue = 0;
 }
 
-// --- FIX FOR MOBILE MEMORY CRASHES: LIMIT CANVAS SIZE ---
+// --- CORE CAPTURE LOGIC ---
+
 function resizeCanvases(videoWidth, videoHeight) {
-  // Cap width to 1920px (1080p). 
-  // Mobile browsers often crash with 4K (3840px) canvases.
+  // FIX FOR MOBILE: Cap max width to 1920px to prevent memory crashes
   const MAX_WIDTH = 1920;
-  
   let width = videoWidth;
   let height = videoHeight;
 
@@ -242,170 +209,87 @@ function resizeCanvases(videoWidth, videoHeight) {
   annotationCanvas.height = height;
 }
 
-function teardownHelperVideo() {
-  if (!helperVideo) return;
-  helperVideo.removeEventListener("loadedmetadata", handleHelperLoadedMetadata);
-  helperVideo.removeEventListener("seeked", handleHelperSeeked);
-  helperVideo.removeEventListener("timeupdate", handleHelperTimeUpdate);
-  helperVideo.removeEventListener("error", handleHelperError);
-  try {
-    helperVideo.pause();
-  } catch (error) {
-    // ignore pause issues on cleanup
-  }
-  helperVideo.removeAttribute("src");
-  helperVideo.load();
-  // Remove from DOM
-  helperVideo.remove();
-  helperVideo = null;
-  helperSeekAttempted = false;
-}
+// This function just draws the pixels; it doesn't change the UI state.
+function bufferFrame(source) {
+  if (!source.videoWidth || !source.videoHeight) return false;
 
-function prepareHelperVideo() {
-  teardownHelperVideo();
-  if (!currentClip?.src) {
-    return;
-  }
-
-  helperVideo = document.createElement("video");
-  helperVideo.crossOrigin = "anonymous";
-  helperVideo.preload = "auto";
-  helperVideo.muted = true;
-  helperVideo.setAttribute("playsinline", "");
-  helperVideo.setAttribute("webkit-playsinline", "");
-  
-  // MOBILE SAFARI FIX: 
-  // Append video to DOM so the browser actually processes it.
-  // Hide it completely using CSS styles.
-  helperVideo.style.position = "absolute";
-  helperVideo.style.width = "1px";
-  helperVideo.style.height = "1px";
-  helperVideo.style.opacity = "0";
-  helperVideo.style.zIndex = "-1000";
-  helperVideo.style.pointerEvents = "none";
-  document.body.appendChild(helperVideo);
-
-  helperVideo.addEventListener("loadedmetadata", handleHelperLoadedMetadata);
-  helperVideo.addEventListener("seeked", handleHelperSeeked);
-  helperVideo.addEventListener("timeupdate", handleHelperTimeUpdate);
-  helperVideo.addEventListener("error", handleHelperError);
-  helperVideo.src = currentClip.src;
-  helperVideo.load();
-}
-
-function handleHelperLoadedMetadata() {
-  if (!helperVideo || !Number.isFinite(helperVideo.duration)) {
-    return;
-  }
-  helperSeekAttempted = true;
-  const duration = helperVideo.duration;
-  // Cap the seek target to slightly before the end
-  const offset = duration > 0.5 ? 0.1 : Math.max(duration * 0.5, 0.01);
-  const target = Math.max(duration - offset, 0);
-  try {
-    helperVideo.currentTime = target;
-  } catch (error) {
-    // Safari may throw if data for the target frame is not buffered yet.
-  }
-}
-
-function helperFinalizeCapture() {
-  if (!helperVideo || helperVideo.readyState < 2 || frameCaptured) {
-    return;
-  }
-  const success = captureFrameImage(helperVideo, helperVideo.currentTime);
-  if (success) {
-    teardownHelperVideo();
-  } else {
-    handleHelperError();
-  }
-}
-
-function handleHelperSeeked() {
-  helperFinalizeCapture();
-}
-
-function handleHelperTimeUpdate() {
-  if (!helperSeekAttempted || frameCaptured) {
-    return;
-  }
-  helperFinalizeCapture();
-}
-
-function handleHelperError() {
-  teardownHelperVideo();
-  if (!frameCaptured) {
-    annotationStatus.textContent =
-      "Final frame will appear below once the clip finishes playing. If it does not, replay the clip.";
-  }
-}
-
-function captureFrameImage(source, frameTimeValue) {
-  if (!source.videoWidth || !source.videoHeight) {
-    return false;
-  }
-
-  const firstCapture = !frameCaptured;
   resizeCanvases(source.videoWidth, source.videoHeight);
   
-  // 1. Draw the image directly to the BOTTOM canvas
+  // Draw directly to the bottom canvas
   overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
   
-  // 2. Clear the TOP canvas so it is transparent for drawing
+  // Clear top canvas to ensure transparency
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+  
+  // Mobile safety: ensure no background image
+  annotationCanvas.style.backgroundImage = "";
 
-  // 3. Ensure we don't try to set the image as a background
-  annotationCanvas.style.backgroundImage = ""; 
-
-  frameCaptured = true;
-  canvasContainer.hidden = false;
-
-  annotationStatus.textContent =
-    "Final frame ready. Review the clip above and draw your two safety lines when ready.";
-
-  if (firstCapture) {
-    if (video.paused) {
-      videoStatus.textContent = "Final frame captured. Replay the clip if you need another look.";
-    } else {
-      videoStatus.textContent =
-        "Final frame captured below. You can keep watching or replay the clip when ready.";
-    }
-  }
-  replayBtn.disabled = false;
-  const numericTime = Number(
-    ((frameTimeValue ?? source.currentTime ?? 0) || 0).toFixed(3)
-  );
-  capturedFrameTimeValue = Number.isFinite(numericTime) ? numericTime : 0;
+  finalFrameBuffered = true;
   return true;
 }
 
-function freezeOnFinalFrame() {
+// This function reveals the already-drawn canvas to the user.
+function revealCapturedFrame() {
+  if (!finalFrameBuffered) return;
+
+  frameCaptured = true;
+  canvasContainer.hidden = false;
+  
+  annotationStatus.textContent =
+    "Final frame ready. Review the clip above and draw your two safety lines when ready.";
+  
+  if (video.paused) {
+    videoStatus.textContent = "Clip complete. The frozen frame below is ready for annotation.";
+  }
+  
+  replayBtn.disabled = false;
+  
+  // Lock in the time
+  const numericTime = Number(((video.currentTime || 0)).toFixed(3));
+  capturedFrameTimeValue = Number.isFinite(numericTime) ? numericTime : 0;
+}
+
+function handleVideoTimeUpdate() {
+  if (frameCaptured) return;
+  if (!video.duration) return;
+
+  const remaining = video.duration - video.currentTime;
+
+  // ROLLING CAPTURE STRATEGY:
+  // While the video plays the last 1 second, we continuously draw the frame 
+  // to the hidden canvas. This ensures we have a valid image *before* // the video finishes and potentially turns black.
+  if (remaining <= 1.0) {
+     bufferFrame(video);
+  }
+}
+
+function handleVideoEnded() {
   if (frameCaptured) return;
 
-  // SAFETY FALLBACK FOR MOBILE:
-  // If we missed the capture window while playing, the video is now at 'duration'.
-  // On mobile, capturing at exactly 'duration' often results in a BLACK frame.
-  // We must explicit seek back slightly and wait for the seek to complete.
-  
-  const duration = Number.isFinite(video.duration) ? video.duration : 0;
-  const target = Math.max(0, duration - 0.1);
+  video.controls = true;
+  video.setAttribute("controls", "");
 
-  videoStatus.textContent = "Capturing final frame...";
+  // If our rolling capture worked, we already have the image. Show it.
+  if (finalFrameBuffered) {
+    revealCapturedFrame();
+  } else {
+    // Fallback: If user scrubbed to the end immediately, we might not have buffered yet.
+    // Seek back slightly to ensure we don't capture a black "end" frame.
+    const target = Math.max(0, video.duration - 0.1);
+    
+    videoStatus.textContent = "Capturing final frame...";
+    
+    const onSeeked = () => {
+      if (bufferFrame(video)) {
+        revealCapturedFrame();
+      } else {
+        videoStatus.textContent = "Could not capture frame. Please press Replay.";
+      }
+    };
 
-  // Define a one-time listener for the seek completion
-  const onSeeked = () => {
-    const success = captureFrameImage(video, target);
-    if (success) {
-      videoStatus.textContent = "Clip complete. The frozen frame below is ready.";
-    } else {
-      videoStatus.textContent = "Clip complete. Tap replay if frame is missing.";
-    }
-  };
-
-  video.addEventListener("seeked", onSeeked, { once: true });
-  
-  // Trigger the seek
-  video.currentTime = target;
+    video.addEventListener("seeked", onSeeked, { once: true });
+    video.currentTime = target;
+  }
 }
 
 function handleVideoLoaded() {
@@ -413,11 +297,7 @@ function handleVideoLoaded() {
   video.controls = true;
   video.setAttribute("controls", "");
   video.play().catch(() => {
-    try {
-      video.pause();
-    } catch (error) {
-      // ignore pause failures
-    }
+    // Auto-play failed (expected on some browsers), wait for user tap
     videoStatus.textContent = "Clip loaded. Press play to begin.";
   });
 }
@@ -428,74 +308,43 @@ function handleVideoPlay() {
     : "Watching clip…";
 }
 
-function handleVideoEnded() {
-  // Trigger the safety seek-and-capture
-  freezeOnFinalFrame();
-  video.controls = true;
-  video.setAttribute("controls", "");
-}
-
-function handleVideoTimeUpdate() {
-  if (frameCaptured) {
-    return;
+function handleVideoError() {
+  let message = "Clip failed to load. ";
+  if (currentClip?.src) {
+      message += "Check URL. ";
   }
-
-  const duration = Number.isFinite(video.duration) ? video.duration : null;
-  if (!duration) {
-    return;
-  }
-
-  // MOBILE FIX: Increased threshold from 0.25 to 0.5.
-  // Mobile browsers throttle 'timeupdate' events. We need a wider window
-  // to catch the frame while the video is still playing, which avoids the black-frame issue.
-  const remaining = duration - video.currentTime;
-  if (remaining <= 0.5) { 
-    // Capture slightly before the end (0.1s before)
-    const success = captureFrameImage(video, duration - 0.1);
-    if (!success) {
-      return;
-    }
-    annotationStatus.textContent =
-      "Final frame ready. Review the clip above and draw your two safety lines when ready.";
-  }
+  videoStatus.textContent = message;
+  showToast(message);
 }
 
 function handleReplay() {
   if (!currentClip) return;
+  
   annotationStatus.textContent =
     "Final frame remains below. Review the clip again and adjust your line if needed.";
+  
   activeDrawingLine = null;
   completedLines = [];
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
+  
+  updateSubmissionPayload();
+  
+  // Reset UI texts
   if (submissionConfig.endpoint) {
     submissionStatus.textContent = participantIdValue
       ? "Draw two lines on the frozen frame to enable submission."
       : "Enter your participant ID above before submitting.";
-  } else {
-    submissionStatus.textContent =
-      "Investigator submission endpoint not configured. Update clip-config.js.";
   }
-  updateSubmissionPayload();
-  try {
-    video.pause();
-  } catch (error) {
-    // ignore pause issues on replay
-  }
+
   video.currentTime = 0;
-  video.controls = true;
-  video.setAttribute("controls", "");
-  video.play()
-    .then(() => {
-      videoStatus.textContent = frameCaptured
-        ? "Replaying clip. The final frame remains available below."
-        : "Replaying clip…";
-    })
-    .catch(() => {
-      videoStatus.textContent = "Clip reset. Press play to watch again.";
-    });
+  video.play().catch(() => {
+    videoStatus.textContent = "Clip reset. Press play to watch again.";
+  });
 }
+
+// --- DRAWING LOGIC (Unchanged) ---
 
 function getPointerPosition(evt) {
   const rect = annotationCanvas.getBoundingClientRect();
@@ -517,25 +366,17 @@ function drawLine() {
 
   linesToDraw.forEach(line => {
     if (!line) return;
-    
     annotationCtx.strokeStyle = "#38bdf8";
     annotationCtx.lineWidth = Math.max(4, annotationCanvas.width * 0.004);
     annotationCtx.lineCap = "round";
-    
-    // Draw the line segment
     annotationCtx.beginPath();
     annotationCtx.moveTo(line.start.x, line.start.y);
     annotationCtx.lineTo(line.end.x, line.end.y);
     annotationCtx.stroke();
-
     annotationCtx.fillStyle = "#0ea5e9";
-    
-    // Draw start circle
     annotationCtx.beginPath();
     annotationCtx.arc(line.start.x, line.start.y, annotationCtx.lineWidth, 0, Math.PI * 2);
     annotationCtx.fill();
-    
-    // Draw end circle
     annotationCtx.beginPath();
     annotationCtx.arc(line.end.x, line.end.y, annotationCtx.lineWidth, 0, Math.PI * 2);
     annotationCtx.fill();
@@ -556,7 +397,6 @@ function normalizeLine(line) {
 }
 
 function updateSubmissionPayload() {
-  // Require exactly two lines to enable submission
   if (completedLines.length !== 2 || !frameCaptured || !currentClip) {
     latestPayload = null;
     submitAnnotationBtn.disabled = true;
@@ -568,45 +408,27 @@ function updateSubmissionPayload() {
     return;
   }
   
-  const frameTime = capturedFrameTimeValue;
-  
   const incisionDetails = completedLines.map(line => {
-      const lengthPixels = Math.hypot(
-        line.end.x - line.start.x,
-        line.end.y - line.start.y
-      );
-
-      const startPixels = {
-        x: Number(line.start.x.toFixed(2)),
-        y: Number(line.start.y.toFixed(2)),
-      };
-      const endPixels = {
-        x: Number(line.end.x.toFixed(2)),
-        y: Number(line.end.y.toFixed(2)),
-      };
-      
+      const lengthPixels = Math.hypot(line.end.x - line.start.x, line.end.y - line.start.y);
       return {
           normalized: normalizeLine(line),
           pixels: {
-              start: startPixels,
-              end: endPixels,
+              start: { x: Number(line.start.x.toFixed(2)), y: Number(line.start.y.toFixed(2)) },
+              end: { x: Number(line.end.x.toFixed(2)), y: Number(line.end.y.toFixed(2)) },
               length: Number(lengthPixels.toFixed(2)),
           }
       };
   });
   
   const normalizedIncisionLines = incisionDetails.map(d => d.normalized);
-  
   const filenameHint = getFilenameHint();
 
-  const payload = {
+  latestPayload = {
     clipId: currentClip.id,
     clipLabel: currentClip.label,
     videoSrc: currentClip.src,
-    capturedFrameTime: frameTime,
-    // Store array of normalized lines
+    capturedFrameTime: capturedFrameTimeValue,
     incisions: normalizedIncisionLines,
-    // Store array of detailed information (normalized + pixels)
     incisionDetails: incisionDetails, 
     canvasSize: { width: annotationCanvas.width, height: annotationCanvas.height },
     generatedAt: new Date().toISOString(),
@@ -614,18 +436,8 @@ function updateSubmissionPayload() {
     filenameHint,
   };
 
-  latestPayload = payload;
-
-  if (!submissionConfig.endpoint) {
+  if (!submissionConfig.endpoint || !participantIdValue) {
     submitAnnotationBtn.disabled = true;
-    submissionStatus.textContent =
-      "Investigator submission endpoint not configured. Update clip-config.js.";
-    return;
-  }
-
-  if (!participantIdValue) {
-    submitAnnotationBtn.disabled = true;
-    submissionStatus.textContent = "Enter your participant ID above before submitting.";
     return;
   }
 
@@ -635,17 +447,17 @@ function updateSubmissionPayload() {
   submissionStatus.textContent = "Ready to submit. Tap the button to send your annotation.";
 }
 
+// --- INPUT HANDLING ---
+
 function handlePointerDown(evt) {
   if (!frameCaptured) {
     showToast("Final frame still loading. Please wait a moment before drawing.");
     return;
   }
-  
   if (completedLines.length >= 2) {
       showToast("Two lines already drawn. Tap 'Clear Line(s)' to restart.");
       return;
   }
-
   evt.preventDefault();
   pointerDown = true;
   const start = getPointerPosition(evt);
@@ -669,13 +481,9 @@ function handlePointerUp(evt) {
   evt.preventDefault();
   pointerDown = false;
   activeDrawingLine.end = getPointerPosition(evt);
-  
-  // Finalize the line
   completedLines.push(activeDrawingLine);
   activeDrawingLine = null;
-  
-  drawLine(); // Redraw all completed lines
-  
+  drawLine();
   clearLineBtn.disabled = false;
   
   if (completedLines.length === 2) {
@@ -691,115 +499,63 @@ function clearLine() {
   completedLines = [];
   pointerDown = false;
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  annotationStatus.textContent =
-    "Final frame ready. Draw your two lines for the safety corridor.";
+  annotationStatus.textContent = "Final frame ready. Draw your two lines for the safety corridor.";
   clearLineBtn.disabled = true;
   updateSubmissionPayload();
 }
 
 async function submitAnnotation() {
-  if (!latestPayload) {
-    showToast("Draw the two lines before submitting.");
-    return;
-  }
-
-  if (!submissionConfig.endpoint) {
-    showToast("Submission endpoint missing. Update clip-config.js.");
-    return;
-  }
-
+  if (!latestPayload || !submissionConfig.endpoint) return;
   if (submissionInFlight) return;
 
   submissionInFlight = true;
   submitAnnotationBtn.disabled = true;
   submissionStatus.textContent = "Submitting annotation…";
 
-  const method = submissionConfig.method || "POST";
   const headers = { ...(submissionConfig.headers || {}) };
-  let shouldSetDefaultContentType = true;
-  for (const key of Object.keys(headers)) {
-    if (key.toLowerCase() === "content-type") {
-      shouldSetDefaultContentType = false;
-      if (headers[key] === null) {
-        delete headers[key];
-      }
-    }
-  }
-  if (shouldSetDefaultContentType) {
-    headers["Content-Type"] = "application/json";
+  if (!Object.keys(headers).some(k => k.toLowerCase() === 'content-type')) {
+     headers["Content-Type"] = "application/json";
   }
 
-  const filenameHint = getFilenameHint();
-  const additionalFields = buildAdditionalFields(filenameHint);
   const csvContent = collectFormDataAsCSV();
-let bodyWrapper;
-const key =
-  typeof submissionConfig.bodyWrapper === "string" && submissionConfig.bodyWrapper
-    ? submissionConfig.bodyWrapper
-    : "annotation";
+  const wrapperKey = (submissionConfig.bodyWrapper && submissionConfig.bodyWrapper !== "none") 
+                     ? submissionConfig.bodyWrapper : "annotation";
 
-if (submissionConfig.bodyWrapper === "none") {
-  bodyWrapper = {
-    ...additionalFields,
-    ...latestPayload,
-    csv_form_data: csvContent
-  };
-} else {
-  bodyWrapper = {
-    ...additionalFields,
-    [key]: latestPayload,
-    csv_form_data: csvContent // <-- Add CSV string as extra field
-  };
-}
-
-  const fetchOptions = {
-    method,
-    headers,
-    body: JSON.stringify(bodyWrapper),
-  };
-
-  if (submissionConfig.mode) {
-    fetchOptions.mode = submissionConfig.mode;
-  }
-  if (submissionConfig.credentials) {
-    fetchOptions.credentials = submissionConfig.credentials;
-  }
+  const body = submissionConfig.bodyWrapper === "none" 
+    ? { ...buildAdditionalFields(getFilenameHint()), ...latestPayload, csv_form_data: csvContent }
+    : { ...buildAdditionalFields(getFilenameHint()), [wrapperKey]: latestPayload, csv_form_data: csvContent };
 
   try {
-    const response = await fetch(submissionConfig.endpoint, fetchOptions);
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
-    }
+    const response = await fetch(submissionConfig.endpoint, {
+        method: submissionConfig.method || "POST",
+        headers,
+        body: JSON.stringify(body)
+    });
+    if (!response.ok) throw new Error("Submission failed");
     submissionStatus.textContent = "Annotation submitted. Thank you!";
     showToast("Annotation sent to investigator.");
   } catch (error) {
     submissionStatus.textContent = "Submission failed. Please try again.";
     submitAnnotationBtn.disabled = false;
-    showToast("Unable to submit annotation. Check your connection and try again.");
-    console.error(error);
+    showToast("Unable to submit annotation. Check connection.");
   } finally {
     submissionInFlight = false;
   }
 }
 
+// --- HELPERS ---
+
 function applyParticipantId(rawValue) {
   participantIdValue = (rawValue || "").trim();
-  if (participantIdValue) {
-    participantIdStatus.textContent =
-      "Participant ID recorded. Continue with the steps below.";
-  } else {
-    participantIdStatus.textContent =
-      "Enter the ID provided by the study team. This is required before submitting your annotation.";
-  }
+  participantIdStatus.textContent = participantIdValue 
+    ? "Participant ID recorded. Continue with the steps below."
+    : "Enter the ID provided by the study team. This is required before submitting your annotation.";
   updateSubmissionPayload();
 }
 
 function getFilenameHint() {
   const clipPart = currentClip?.id ? String(currentClip.id) : "annotation";
-  if (participantIdValue) {
-    return `${participantIdValue}_${clipPart}.json`;
-  }
-  return `${clipPart}.json`;
+  return participantIdValue ? `${participantIdValue}_${clipPart}.json` : `${clipPart}.json`;
 }
 
 function buildAdditionalFields(filenameHint) {
@@ -808,25 +564,22 @@ function buildAdditionalFields(filenameHint) {
     fields.studyId = participantIdValue;
     fields.participantId = participantIdValue;
   }
-  if (filenameHint) {
-    fields.filenameHint = filenameHint;
-  }
+  if (filenameHint) fields.filenameHint = filenameHint;
   return fields;
 }
+
+// --- EVENT LISTENERS ---
 
 clipSelect.addEventListener("change", loadSelectedClip);
 replayBtn.addEventListener("click", handleReplay);
 video.addEventListener("loadeddata", handleVideoLoaded);
-video.addEventListener("error", handleVideoError, { once: false });
+video.addEventListener("error", handleVideoError);
 video.addEventListener("play", handleVideoPlay);
 video.addEventListener("timeupdate", handleVideoTimeUpdate);
 video.addEventListener("ended", handleVideoEnded);
 clearLineBtn.addEventListener("click", clearLine);
 submitAnnotationBtn.addEventListener("click", submitAnnotation);
-
-participantIdInput.addEventListener("input", (event) => {
-  applyParticipantId(event.target.value);
-});
+participantIdInput.addEventListener("input", (e) => applyParticipantId(e.target.value));
 
 if (window.PointerEvent) {
   annotationCanvas.addEventListener("pointerdown", handlePointerDown, { passive: false });
@@ -838,11 +591,9 @@ if (window.PointerEvent) {
   annotationCanvas.addEventListener("mousedown", handlePointerDown, { passive: false });
   annotationCanvas.addEventListener("mousemove", handlePointerMove, { passive: false });
   annotationCanvas.addEventListener("mouseup", handlePointerUp, { passive: false });
-  annotationCanvas.addEventListener("mouseleave", handlePointerUp, { passive: false });
   annotationCanvas.addEventListener("touchstart", handlePointerDown, { passive: false });
   annotationCanvas.addEventListener("touchmove", handlePointerMove, { passive: false });
   annotationCanvas.addEventListener("touchend", handlePointerUp, { passive: false });
-  annotationCanvas.addEventListener("touchcancel", handlePointerUp, { passive: false });
 }
 
 const availableClips = getClips();
