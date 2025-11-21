@@ -33,7 +33,7 @@ let pointerDown = false;
 let latestPayload = null;
 let submissionInFlight = false;
 let capturedFrameTimeValue = 0;
-let isPreloading = false; // NEW: To track the pre-fetch sequence
+let isPreloading = false; 
 
 // --- UTILITY FUNCTIONS ---
 
@@ -140,12 +140,8 @@ function loadSelectedClip() {
     poster: option.dataset.poster || "",
   };
 
-  // Ensure canvas is hidden until we capture the frame
   canvasContainer.hidden = true;
-  
-  // Disable controls during preload to prevent user interference
   video.removeAttribute("controls");
-  
   video.setAttribute("playsinline", "");
   video.setAttribute("webkit-playsinline", "");
   video.crossOrigin = "anonymous";
@@ -195,7 +191,6 @@ function resetAnnotationState() {
 // --- CORE CAPTURE LOGIC ---
 
 function resizeCanvases(videoWidth, videoHeight) {
-  // FIX FOR MOBILE: Cap max width to 1920px
   const MAX_WIDTH = 1920;
   let width = videoWidth;
   let height = videoHeight;
@@ -214,23 +209,16 @@ function resizeCanvases(videoWidth, videoHeight) {
   }
 }
 
-// Draws the current video frame to the bottom canvas (STATIC IMAGE)
 function bufferFrame(source) {
   if (!source.videoWidth || !source.videoHeight) return false;
 
   resizeCanvases(source.videoWidth, source.videoHeight);
-  
-  // Draw directly to the bottom canvas
   overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
-  
-  // Mobile safety
   annotationCanvas.style.backgroundImage = "";
-
   finalFrameBuffered = true;
   return true;
 }
 
-// Reveals the static canvas to the user
 function revealCapturedFrame() {
   if (!finalFrameBuffered) return;
 
@@ -243,32 +231,23 @@ function revealCapturedFrame() {
   replayBtn.disabled = false;
 }
 
-// --- PRELOAD SEQUENCE (The Magic Fix) ---
+// --- PRELOAD SEQUENCE ---
 
 function handleVideoLoadedMetadata() {
   const duration = video.duration;
-  // Sanity check: if infinite or NaN (streaming), we can't seek to end.
   if (!Number.isFinite(duration) || duration <= 0) return;
 
-  // Start the Pre-load Dance
   isPreloading = true;
   videoStatus.textContent = "Initializing final frame...";
 
-  // 1. Seek to the very end (minus small buffer for safety)
   const target = Math.max(0, duration - 0.1);
   
   const onSeekEnd = () => {
-     // 2. Capture the frame immediately
      bufferFrame(video);
-     
-     // 3. Lock in the capture time
      const numericTime = Number(target.toFixed(3));
      capturedFrameTimeValue = Number.isFinite(numericTime) ? numericTime : 0;
-
-     // 4. Show it to the user!
      revealCapturedFrame();
 
-     // 5. Seek back to start so user can watch
      const onSeekStart = () => {
         isPreloading = false;
         videoStatus.textContent = "Ready. Press play to watch.";
@@ -280,19 +259,16 @@ function handleVideoLoadedMetadata() {
      video.currentTime = 0;
   };
 
-  // Trigger the jump
   video.addEventListener("seeked", onSeekEnd, { once: true });
   video.currentTime = target;
 }
 
 function handleVideoTimeUpdate() {
-  // No operations needed during playback anymore. 
-  // The frame is already captured statically.
+  // No operations needed during playback
 }
 
 function handleVideoEnded() {
   if (isPreloading) return; 
-  // Video finished playing naturally.
   videoStatus.textContent = "Clip complete. The final frame is below.";
   video.controls = true;
   video.setAttribute("controls", "");
@@ -312,10 +288,6 @@ function handleVideoError() {
 
 function handleReplay() {
   if (!currentClip) return;
-  
-  // Since we already have the frame captured from the start,
-  // Replay just means playing the video again. We do NOT clear the canvas.
-  
   videoStatus.textContent = "Replaying clip...";
   video.currentTime = 0;
   video.play().catch(() => {
@@ -323,7 +295,7 @@ function handleReplay() {
   });
 }
 
-// --- DRAWING LOGIC (Unchanged) ---
+// --- DRAWING LOGIC ---
 
 function getPointerPosition(evt) {
   const rect = annotationCanvas.getBoundingClientRect();
@@ -345,13 +317,19 @@ function drawLine() {
 
   linesToDraw.forEach(line => {
     if (!line) return;
+    
+    // QUALITY FIX: Increased thickness multiplier from 0.004 to 0.008
+    // This ensures the line looks solid even when scaled down on mobile screens.
     annotationCtx.strokeStyle = "#38bdf8";
-    annotationCtx.lineWidth = Math.max(4, annotationCanvas.width * 0.004);
+    annotationCtx.lineWidth = Math.max(4, annotationCanvas.width * 0.008);
     annotationCtx.lineCap = "round";
+    annotationCtx.lineJoin = "round"; // Smooth corners
+    
     annotationCtx.beginPath();
     annotationCtx.moveTo(line.start.x, line.start.y);
     annotationCtx.lineTo(line.end.x, line.end.y);
     annotationCtx.stroke();
+    
     annotationCtx.fillStyle = "#0ea5e9";
     annotationCtx.beginPath();
     annotationCtx.arc(line.start.x, line.start.y, annotationCtx.lineWidth, 0, Math.PI * 2);
@@ -376,7 +354,6 @@ function normalizeLine(line) {
 }
 
 function updateSubmissionPayload() {
-  // User can only submit if lines are drawn AND we have the frame time
   if (completedLines.length !== 2 || !frameCaptured || !currentClip) {
     latestPayload = null;
     submitAnnotationBtn.disabled = true;
@@ -479,7 +456,6 @@ function clearLine() {
   completedLines = [];
   pointerDown = false;
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  // Do NOT clear the background image (finalFrameCanvas), only the lines (annotationCanvas)
   annotationStatus.textContent = "Frame ready. Draw your two lines for the safety corridor.";
   clearLineBtn.disabled = true;
   updateSubmissionPayload();
@@ -553,10 +529,7 @@ function buildAdditionalFields(filenameHint) {
 
 clipSelect.addEventListener("change", loadSelectedClip);
 replayBtn.addEventListener("click", handleReplay);
-
-// Use loadedmetadata for the pre-fetch sequence
 video.addEventListener("loadedmetadata", handleVideoLoadedMetadata);
-
 video.addEventListener("error", handleVideoError);
 video.addEventListener("play", handleVideoPlay);
 video.addEventListener("timeupdate", handleVideoTimeUpdate);
