@@ -157,3 +157,31 @@ window.ANNOTATION_SUBMISSION = {
   bodyWrapper: "annotation"
 };
 
+
+// Configure where annotations are sent after participants submit.
+window.ANNOTATION_SUBMISSION = {
+  // JSON endpoint (leave as your existing Formspree endpoint if desired)
+  endpoint: "https://formspree.io/f/mnnlywpg",
+  method: "POST",
+  headers: {
+    "Accept": "application/json"
+  },
+  additionalFields: {
+    studyId: "demo-study",
+  },
+  // Wrap the annotation in a key OR set to "none" for a flat JSON body.
+  // If your JSON is already correct, keep as "annotation".
+  bodyWrapper: "annotation",
+  // Optional CSV mirror: sends a second POST as form-encoded flat fields
+  // so Formspree's CSV includes Specialty/Board/Practice/Volume.
+  csvMirror: {
+    enabled: true,
+    endpoint: "https://formspree.io/f/mnnlywpg", //
+    method: "POST",
+    headers: {
+      // Usually no need to set; Content-Type is set by the code.
+    },
+    // mode: "cors",
+    // credentials: "omit",
+  },
+};
