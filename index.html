@@ -129,15 +129,23 @@
         </div>
       </header>
       <div class="card__body">
+        <!-- 
+           UPDATED STRUCTURE: 
+           The finalFrame canvas is now inside the container.
+           The container handles the 'hidden' state for the group.
+        -->
         <div class="canvas-container" id="canvasContainer" hidden>
+          <!-- Bottom Layer: The Image -->
           <canvas id="finalFrame" width="1280" height="720"></canvas>
+          <!-- Top Layer: The Drawings -->
           <canvas id="annotationCanvas"></canvas>
+          
           <p class="canvas-hint">
-          Tap or click to place the lines, drag, and release to finish. You can begin as
-          soon as the frozen frame appears, even if the clip is still playing above.
-    </p>
-  </div>
-          <p class="help" id="annotationStatus">The final frame appears below shortly. You can keep watching while it prepares.</p>
+            Tap or click to place the lines, drag, and release to finish. You can begin as
+            soon as the frozen frame appears, even if the clip is still playing above.
+          </p>
+        </div>
+        <p class="help" id="annotationStatus">The final frame appears below shortly. You can keep watching while it prepares.</p>
       </div>
     </section>
 
