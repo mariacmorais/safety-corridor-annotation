@@ -151,37 +151,44 @@ body {
 .canvas-container {
   position: relative;
   width: 100%;
-  display: grid;
-  gap: 0.5rem;
+  aspect-ratio: 16 / 9;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  overflow: hidden;
 }
 
 .canvas-container canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  height: auto;
-  display: block;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  height: 100%;
   touch-action: none;
+  display: block;
 }
 
 #finalFrame {
-  grid-column: 1;
-  grid-row: 1;
   z-index: 1;
 }
 
 #annotationCanvas {
-  grid-column: 1;
-  grid-row: 1;
   z-index: 10;
 }
 
 .canvas-hint {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  right: 1rem;
   margin: 0;
   font-size: 0.9rem;
   color: var(--text-muted);
-  grid-column: 1;
-  grid-row: 2;
+  z-index: 5;
+  background: rgba(15, 23, 42, 0.8);
+  padding: 0.5rem;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
 }
 
 .help {
@@ -268,5 +275,12 @@ button:not(:disabled):active {
 
   button {
     width: 100%;
+  }
+
+  .canvas-hint {
+    font-size: 0.85rem;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
   }
 }
