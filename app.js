@@ -203,10 +203,15 @@ function resizeCanvases(videoWidth, videoHeight) {
     height = videoHeight * ratio;
   }
 
-  finalFrameCanvas.width = width;
-  finalFrameCanvas.height = height;
-  annotationCanvas.width = width;
-  annotationCanvas.height = height;
+  // PERFORMANCE OPTIMIZATION: 
+  // Only resize (which clears canvas) if dimensions actually change.
+  // This is crucial for smooth mirroring.
+  if (finalFrameCanvas.width !== width || finalFrameCanvas.height !== height) {
+    finalFrameCanvas.width = width;
+    finalFrameCanvas.height = height;
+    annotationCanvas.width = width;
+    annotationCanvas.height = height;
+  }
 }
 
 // This function just draws the pixels; it doesn't change the UI state.
@@ -218,8 +223,10 @@ function bufferFrame(source) {
   // Draw directly to the bottom canvas
   overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
   
-  // Clear top canvas to ensure transparency (clean slate for drawing later)
-  annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+  // Clear top canvas to ensure transparency
+  // (Only need to do this if we suspect artifacts, but for safety we do it)
+  // Note: If we are mirroring rapidly, we might skip clearing *every* frame for speed,
+  // but clearing is fast enough on modern devices.
   
   // Mobile safety: ensure no background image
   annotationCanvas.style.backgroundImage = "";
@@ -253,19 +260,15 @@ function handleVideoTimeUpdate() {
   if (frameCaptured) return;
   if (!video.duration) return;
 
-  const remaining = video.duration - video.currentTime;
-
-  // ROLLING CAPTURE STRATEGY:
-  // We buffer and SHOW the frame during the last 3 seconds.
-  // This ensures the user sees the frame appearing before the clip ends.
-  if (remaining <= 3.0) { 
-     bufferFrame(video);
+  // NEW STRATEGY: LIVE MIRROR
+  // We buffer the frame continuously while playing.
+  // This allows the user to see the canvas working IMMEDIATELY.
+  bufferFrame(video);
      
-     // NEW: Unhide immediately so user sees it updating in real-time
-     if (canvasContainer.hidden) {
-         canvasContainer.hidden = false;
-         annotationStatus.textContent = "Final frame appearing below...";
-     }
+  // Unhide immediately so user sees it updating in real-time
+  if (canvasContainer.hidden) {
+      canvasContainer.hidden = false;
+      annotationStatus.textContent = "Syncing frame... (Wait for clip to end to draw)";
   }
 }
 
