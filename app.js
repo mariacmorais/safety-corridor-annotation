@@ -49,8 +49,8 @@ function collectFormDataAsCSV() {
   const clipId = currentClip?.id || "";
   const timestamp = new Date().toISOString();
 
-  const csvHeader = "Name,Institution,ClipID,Parkland,Nassar,SubmittedAt\n";
-  const csvRow = `"${name}","${institution}","${clipId}","${parkland}","${nassar}","${timestamp}"\n`;
+  const csvHeader = "Name,Institution,Specialty,Years_of_practice,Volume,Board,ClipID,Parkland,Nassar,SubmittedAt\n";
+  const csvRow = `"${name}","${institution}","${specialty}","${years_in_practice}","${volume}","${board}","${clipId}","${parkland}","${nassar}","${timestamp}"\n`;
 
   return csvHeader + csvRow;
 }
