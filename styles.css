@@ -148,18 +148,20 @@ body {
   color: var(--text-muted);
 }
 
+/* --- UPDATED CANVAS CONTAINER CSS --- */
 .canvas-container {
   position: relative;
   display: grid;
-  /* Create a single grid area named "stack" */
+  /* This defines a single named area "stack" */
   grid-template-areas: "stack"; 
   gap: 0.5rem;
 }
 
 .canvas-container canvas {
-  /* Force both canvases to occupy the same space */
+  /* Both canvases (image and drawing) occupy the "stack" area */
   grid-area: stack;
   width: 100%;
+  height: auto; /* REQUIRED for correct aspect ratio scaling in grid */
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   touch-action: none;
@@ -173,9 +175,10 @@ body {
 
 /* Ensure the hints/text sit below the stack, not inside the stack area */
 .canvas-container p {
-  /* Moving hint text out of the stack area so it appears below */
+  /* Force the hint text into a new row below the canvas stack */
   grid-row: 2; 
 }
+/* ------------------------------------ */
 
 .canvas-hint {
   margin: 0;
