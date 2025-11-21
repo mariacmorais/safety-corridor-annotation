@@ -35,7 +35,6 @@ let submissionInFlight = false;
 let capturedFrameTimeValue = 0;
 
 // --- UTILITY FUNCTIONS ---
-
 function collectFormDataAsCSV() {
   const name = document.getElementById("participantIdInput")?.value.trim() || "";
   const institution = document.getElementById("institutionInput")?.value.trim() || "";
@@ -49,8 +48,8 @@ function collectFormDataAsCSV() {
   const clipId = currentClip?.id || "";
   const timestamp = new Date().toISOString();
 
-  const csvHeader = "Name,Institution,Specialty,Years_of_practice,Volume,Board,ClipID,Parkland,Nassar,SubmittedAt\n";
-  const csvRow = `"${name}","${institution}","${specialty}","${years_in_practice}","${volume}","${board}","${clipId}","${parkland}","${nassar}","${timestamp}"\n`;
+  const csvHeader = "Name,Institution,Specialty,YearsInPractice,CaseVolume,BoardCertified,Parkland,Nassar,ClipID,SubmittedAt\n";
+  const csvRow = `"${name}","${institution}","${specialty}","${years_in_practice}","${case_volume}","${board}","${parkland}","${nassar}","${clipId}","${timestamp}"\n`;
 
   return csvHeader + csvRow;
 }
