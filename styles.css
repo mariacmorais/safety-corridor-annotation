@@ -148,33 +148,33 @@ body {
   color: var(--text-muted);
 }
 
-/* --- FIX FOR DISTORTION & FITTING --- */
-/* We replace CSS Grid with standard relative/absolute stacking.
-   This allows the image to determine its own aspect ratio naturally. */
-
+/* --- FIXED LAYOUT FOR CANVAS --- */
 .canvas-container {
   position: relative;
-  display: block; /* Standard block flow */
+  display: block;
   width: 100%;
-  /* Remove gap, let margins handle spacing */
+  /* Move the border and radius HERE to act as a frame */
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  /* This clips any canvas overflow, fixing the "outside frame" issue */
+  overflow: hidden; 
 }
 
 .canvas-container canvas {
-  border-radius: 18px;
-  touch-action: none; /* Prevents scrolling while drawing */
+  /* Remove border/radius from children to prevent double-borders */
+  border-radius: 0;
+  border: none;
+  touch-action: none;
+  display: block;
 }
 
-/* Bottom Layer: The Image */
-/* Uses display: block so it respects the image's natural aspect ratio */
 #finalFrame {
-  display: block;
   width: 100%;
   height: auto;
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  /* Ensure it fills the container width exactly */
+  display: block;
 }
 
-/* Top Layer: The Drawing */
-/* Absolutely positioned to match the bottom layer exactly */
 #annotationCanvas {
   position: absolute;
   top: 0;
@@ -182,18 +182,14 @@ body {
   width: 100%;
   height: 100%;
   z-index: 10;
-  /* Remove border here to avoid double-border artifacts */
-  border: none; 
 }
 
-/* Ensure the hint text flows naturally below the stack */
 .canvas-hint {
   margin-top: 0.75rem;
   margin-bottom: 0;
   font-size: 0.9rem;
   color: var(--text-muted);
 }
-/* ------------------------------------ */
 
 .help {
   margin: 0;
