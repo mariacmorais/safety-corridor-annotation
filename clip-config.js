@@ -156,4 +156,3 @@ window.ANNOTATION_SUBMISSION = {
   additionalFields: {},
   bodyWrapper: "annotation"
 };
-
