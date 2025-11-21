@@ -1,8 +1,7 @@
-const participantIdInput = document.getElementById("participantIdInput");
-const participantIdStatus = document.getElementById("participantIdStatus");
 const clipSelect = document.getElementById("clipSelect");
 const replayBtn = document.getElementById("replayBtn");
 const video = document.getElementById("caseVideo");
+const videoOverlay = document.getElementById("videoOverlay");
 const finalFrameCanvas = document.getElementById("finalFrame");
 const annotationCanvas = document.getElementById("annotationCanvas");
 const canvasContainer = document.getElementById("canvasContainer");
@@ -14,45 +13,17 @@ const submitAnnotationBtn = document.getElementById("submitAnnotationBtn");
 const submissionStatus = document.getElementById("submissionStatus");
 
 const submissionConfig = window.ANNOTATION_SUBMISSION || {};
-const baseAdditionalFields = { ...(submissionConfig.additionalFields || {}) };
-delete baseAdditionalFields.studyId;
-delete baseAdditionalFields.participantId;
-delete baseAdditionalFields.filenameHint;
-let participantIdValue = "";
+const csvMirrorConfig = (submissionConfig.csvMirror && submissionConfig.csvMirror.enabled) ? submissionConfig.csvMirror : null;
 
 const overlayCtx = finalFrameCanvas.getContext("2d");
 const annotationCtx = annotationCanvas.getContext("2d");
 
-// State Variables
 let frameCaptured = false;
-let finalFrameBuffered = false; // NEW: Tracks if we have a valid image waiting
 let currentClip = null;
-let activeDrawingLine = null; 
-let completedLines = []; 
+let activeLine = null;
 let pointerDown = false;
 let latestPayload = null;
 let submissionInFlight = false;
-let capturedFrameTimeValue = 0;
-
-// --- UTILITY FUNCTIONS ---
-function collectFormDataAsCSV() {
-  const name = document.getElementById("participantIdInput")?.value.trim() || "";
-  const institution = document.getElementById("institutionInput")?.value.trim() || "";
-  const specialty = document.getElementById("specialtyInput")?.value.trim() || "";
-  const years_in_practice = document.getElementById("practiceInput")?.value.trim() || "";
-  const case_volume = document.getElementById("volumeInput")?.value.trim() || "";
-  const board = document.querySelector('input[name="q3"]:checked')?.value || "";
-  const parkland = document.querySelector('input[name="q1"]:checked')?.value || "";
-  const nassar = document.querySelector('input[name="q2"]:checked')?.value || "";
-
-  const clipId = currentClip?.id || "";
-  const timestamp = new Date().toISOString();
-
-  const csvHeader = "Name,Institution,ClipID,Parkland,Nassar,SubmittedAt\n";
-  const csvRow = `"${name}","${institution}","${clipId}","${parkland}","${nassar}","${timestamp}"\n`;
-
-  return csvHeader + csvRow;
-}
 
 function showToast(message) {
   const toast = toastTemplate.content.firstElementChild.cloneNode(true);
@@ -64,7 +35,30 @@ function showToast(message) {
   setTimeout(() => toast.remove(), 2800);
 }
 
-// --- CLIP MANAGEMENT ---
+function readParam(name) {
+  const params = new URLSearchParams(window.location.search);
+  // Prefer exact key; fall back to case-insensitive match
+  if (params.has(name)) return params.get(name);
+  const lower = name.toLowerCase();
+  for (const [k, v] of params.entries()) {
+    if (k.toLowerCase() === lower) return v;
+  }
+  return "";
+}
+
+function getParticipantMeta() {
+  return {
+    Name: readParam("Name") || readParam("name"),
+    Institution: readParam("Institution") || readParam("institution"),
+    Specialty: readParam("Specialty") || readParam("specialty"),
+    Board: readParam("Board") || readParam("board"),
+    Practice: readParam("Practice") || readParam("practice"),
+    Volume: readParam("Volume") || readParam("volume"),
+    // Preserve any scoring fields if passed by URL (optional)
+    Parkland: readParam("Parkland") || readParam("parkland"),
+    Nassar: readParam("Nassar") || readParam("nassar"),
+  };
+}
 
 function getClips() {
   const clips = Array.isArray(window.ANNOTATION_CLIPS) ? [...window.ANNOTATION_CLIPS] : [];
@@ -138,14 +132,13 @@ function loadSelectedClip() {
     poster: option.dataset.poster || "",
   };
 
+  videoOverlay.hidden = true;
   canvasContainer.hidden = true;
+  video.hidden = false;
   video.removeAttribute("controls");
   video.setAttribute("playsinline", "");
   video.setAttribute("webkit-playsinline", "");
-  
-  // CRITICAL: Set crossOrigin BEFORE src to avoid tainted canvas issues
   video.crossOrigin = "anonymous";
-  
   if (currentClip.poster) {
     video.setAttribute("poster", currentClip.poster);
   } else {
@@ -153,197 +146,166 @@ function loadSelectedClip() {
   }
 
   video.src = currentClip.src;
-  video.load();
-  videoStatus.textContent = "Loading clip…";
+  try { video.load(); } catch {}
+  videoStatus.textContent = "Preparing final frame…";
+  replayBtn.disabled = true;
+}
+
+function looksLikeLocalPath(value) {
+  if (!value) return false;
+  const lower = value.toLowerCase();
+  return (
+    lower.startsWith("file:") ||
+    lower.startsWith("/users/") ||
+    lower.startsWith("c:\\") ||
+    lower.startsWith("\\\\")
+  );
+}
+
+function handleVideoError() {
+  let message = "Clip failed to load. Check that the src URL is correct and publicly accessible.";
+  if (currentClip?.src) {
+    message += ` (Configured source: ${currentClip.src})`;
+    if (looksLikeLocalPath(currentClip.src)) {
+      message +=
+        " — this looks like a local file path. Upload the video to your hosting provider (e.g., GitHub Pages, CDN) and reference the hosted HTTPS URL instead.";
+    }
+  }
+  videoStatus.textContent = message;
+  showToast(message);
   replayBtn.disabled = true;
 }
 
 function resetAnnotationState() {
   frameCaptured = false;
-  finalFrameBuffered = false;
-  activeDrawingLine = null;
-  completedLines = [];
+  activeLine = null;
   pointerDown = false;
   latestPayload = null;
   submissionInFlight = false;
-  
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   overlayCtx.clearRect(0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
-  
   annotationCanvas.style.backgroundImage = "";
-  
-  annotationStatus.textContent =
-    "Final frame will appear below shortly. You can keep watching the clip while it prepares.";
+  annotationStatus.textContent = "Preparing final frame…";
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
-  
   if (submissionConfig.endpoint) {
-    submissionStatus.textContent = participantIdValue
-      ? "Draw two lines on the frozen frame to enable submission."
-      : "Enter your participant ID above before submitting.";
+    submissionStatus.textContent = "Draw the incision on the frozen frame to enable submission.";
   } else {
     submissionStatus.textContent =
       "Investigator submission endpoint not configured. Update clip-config.js.";
   }
-  capturedFrameTimeValue = 0;
 }
 
-// --- CORE CAPTURE LOGIC ---
-
-function resizeCanvases(videoWidth, videoHeight) {
-  // FIX FOR MOBILE: Cap max width to 1920px to prevent memory crashes
-  const MAX_WIDTH = 1920;
-  let width = videoWidth;
-  let height = videoHeight;
-
-  if (width > MAX_WIDTH) {
-    const ratio = MAX_WIDTH / width;
-    width = MAX_WIDTH;
-    height = videoHeight * ratio;
-  }
-
+/** Keep the canvases matched to the video frame size (for crisp drawing). */
+function resizeCanvases(width, height) {
   finalFrameCanvas.width = width;
   finalFrameCanvas.height = height;
   annotationCanvas.width = width;
   annotationCanvas.height = height;
 }
 
-// This function just draws the pixels; it doesn't change the UI state.
-function bufferFrame(source) {
-  if (!source.videoWidth || !source.videoHeight) return false;
+/** Captures whatever frame the <video> is currently on and swaps to annotation mode. */
+function freezeOnFinalFrame() {
+  if (!video.videoWidth || !video.videoHeight) {
+    showToast("Video not ready yet. Please wait a moment.");
+    return;
+  }
 
-  resizeCanvases(source.videoWidth, source.videoHeight);
-  
-  // Draw directly to the bottom canvas
-  overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
-  
-  // Clear top canvas to ensure transparency
+  resizeCanvases(video.videoWidth, video.videoHeight);
+  overlayCtx.drawImage(video, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  
-  // Mobile safety: ensure no background image
-  annotationCanvas.style.backgroundImage = "";
-
-  finalFrameBuffered = true;
-  return true;
-}
-
-// This function reveals the already-drawn canvas to the user.
-function revealCapturedFrame() {
-  if (!finalFrameBuffered) return;
-
+  try {
+    const dataUrl = finalFrameCanvas.toDataURL("image/png");
+    annotationCanvas.style.backgroundImage = `url(${dataUrl})`;
+    annotationCanvas.style.backgroundSize = "contain";
+    annotationCanvas.style.backgroundRepeat = "no-repeat";
+    annotationCanvas.style.backgroundPosition = "center";
+  } catch (error) {
+    frameCaptured = false;
+    showToast("Unable to capture frame. Serve the clip from the same origin or enable CORS.");
+    return;
+  }
   frameCaptured = true;
   canvasContainer.hidden = false;
-  
-  annotationStatus.textContent =
-    "Final frame ready. Review the clip above and draw your two safety lines when ready.";
-  
-  if (video.paused) {
-    videoStatus.textContent = "Clip complete. The frozen frame below is ready for annotation.";
-  }
-  
+  videoOverlay.hidden = false;
+  video.hidden = true;
+  annotationStatus.textContent = "Final frame ready. Draw your incision line.";
+  videoStatus.textContent = "Final frame is shown. You can replay the clip if needed.";
   replayBtn.disabled = false;
-  
-  // Lock in the time
-  const numericTime = Number(((video.currentTime || 0)).toFixed(3));
-  capturedFrameTimeValue = Number.isFinite(numericTime) ? numericTime : 0;
 }
 
-function handleVideoTimeUpdate() {
-  if (frameCaptured) return;
-  if (!video.duration) return;
+/** Seek to the last decodable moment and capture it without user action. */
+function autoCaptureFinalFrame() {
+  if (!currentClip) return;
 
-  const remaining = video.duration - video.currentTime;
-
-  // ROLLING CAPTURE STRATEGY:
-  // While the video plays the last 1 second, we continuously draw the frame 
-  // to the hidden canvas. This ensures we have a valid image *before* // the video finishes and potentially turns black.
-  if (remaining <= 1.0) {
-     bufferFrame(video);
-  }
-}
-
-function handleVideoEnded() {
-  if (frameCaptured) return;
-
-  video.controls = true;
-  video.setAttribute("controls", "");
-
-  // If our rolling capture worked, we already have the image. Show it.
-  if (finalFrameBuffered) {
-    revealCapturedFrame();
-  } else {
-    // Fallback: If user scrubbed to the end immediately, we might not have buffered yet.
-    // Seek back slightly to ensure we don't capture a black "end" frame.
-    const target = Math.max(0, video.duration - 0.1);
-    
-    videoStatus.textContent = "Capturing final frame...";
-    
+  const seekAndCapture = () => {
+    if (!Number.isFinite(video.duration) || video.duration <= 0) {
+      // Duration still unknown; wait a bit for metadata.
+      showToast("Video duration not available yet. Retrying…");
+      return;
+    }
+    const EPSILON = 0.04; // seconds
+    const targetTime = Math.max(0, video.duration - EPSILON);
     const onSeeked = () => {
-      if (bufferFrame(video)) {
-        revealCapturedFrame();
-      } else {
-        videoStatus.textContent = "Could not capture frame. Please press Replay.";
-      }
+      video.removeEventListener("seeked", onSeeked);
+      freezeOnFinalFrame();
     };
+    try {
+      video.pause();
+      video.addEventListener("seeked", onSeeked, { once: true });
+      video.currentTime = targetTime;
+    } catch {
+      showToast("Seeking not supported for this clip.");
+    }
+  };
 
-    video.addEventListener("seeked", onSeeked, { once: true });
-    video.currentTime = target;
+  if (video.readyState >= 1) {
+    seekAndCapture();
+  } else {
+    const onMeta = () => {
+      video.removeEventListener("loadedmetadata", onMeta);
+      seekAndCapture();
+    };
+    video.addEventListener("loadedmetadata", onMeta, { once: true });
+    try { video.load(); } catch {}
   }
 }
 
 function handleVideoLoaded() {
-  videoStatus.textContent = "Clip loaded. Tap play to begin.";
-  video.controls = true;
-  video.setAttribute("controls", "");
-  video.play().catch(() => {
-    // Auto-play failed (expected on some browsers), wait for user tap
-    videoStatus.textContent = "Clip loaded. Press play to begin.";
-  });
+  // Do not autoplay. We only needed the data to ensure dimensions.
+  // Auto-capture is triggered from metadata event to ensure duration is known.
 }
 
-function handleVideoPlay() {
-  videoStatus.textContent = frameCaptured
-    ? "Replaying clip. The final frame remains available below."
-    : "Watching clip…";
+function handleVideoMetadata() {
+  // As soon as duration is known, auto-capture the final frame.
+  autoCaptureFinalFrame();
 }
 
-function handleVideoError() {
-  let message = "Clip failed to load. ";
-  if (currentClip?.src) {
-      message += "Check URL. ";
-  }
-  videoStatus.textContent = message;
-  showToast(message);
+function handleVideoEnded() {
+  videoStatus.textContent = "Clip complete. Final frame locked for annotation.";
+  freezeOnFinalFrame();
 }
 
 function handleReplay() {
   if (!currentClip) return;
-  
-  annotationStatus.textContent =
-    "Final frame remains below. Review the clip again and adjust your line if needed.";
-  
-  activeDrawingLine = null;
-  completedLines = [];
+  videoOverlay.hidden = true;
+  canvasContainer.hidden = true;
+  annotationStatus.textContent = "Watching clip…";
+  video.hidden = false;
+  frameCaptured = false;
+  activeLine = null;
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+  overlayCtx.clearRect(0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
+  annotationCanvas.style.backgroundImage = "";
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
-  
-  updateSubmissionPayload();
-  
-  // Reset UI texts
-  if (submissionConfig.endpoint) {
-    submissionStatus.textContent = participantIdValue
-      ? "Draw two lines on the frozen frame to enable submission."
-      : "Enter your participant ID above before submitting.";
-  }
-
+  submissionStatus.textContent = submissionConfig.endpoint
+    ? "Draw the incision on the frozen frame to enable submission."
+    : "Investigator submission endpoint not configured. Update clip-config.js.";
   video.currentTime = 0;
-  video.play().catch(() => {
-    videoStatus.textContent = "Clip reset. Press play to watch again.";
-  });
+  video.controls = true;
+  video.play().catch(() => {});
 }
-
-// --- DRAWING LOGIC (Unchanged) ---
 
 function getPointerPosition(evt) {
   const rect = annotationCanvas.getBoundingClientRect();
@@ -355,31 +317,24 @@ function getPointerPosition(evt) {
   return { x, y };
 }
 
-function drawLine() {
+function drawLine(line) {
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  
-  const linesToDraw = [...completedLines];
-  if (activeDrawingLine) {
-    linesToDraw.push(activeDrawingLine);
-  }
+  if (!line) return;
+  annotationCtx.strokeStyle = "#38bdf8";
+  annotationCtx.lineWidth = Math.max(4, annotationCanvas.width * 0.004);
+  annotationCtx.lineCap = "round";
+  annotationCtx.beginPath();
+  annotationCtx.moveTo(line.start.x, line.start.y);
+  annotationCtx.lineTo(line.end.x, line.end.y);
+  annotationCtx.stroke();
 
-  linesToDraw.forEach(line => {
-    if (!line) return;
-    annotationCtx.strokeStyle = "#38bdf8";
-    annotationCtx.lineWidth = Math.max(4, annotationCanvas.width * 0.004);
-    annotationCtx.lineCap = "round";
-    annotationCtx.beginPath();
-    annotationCtx.moveTo(line.start.x, line.start.y);
-    annotationCtx.lineTo(line.end.x, line.end.y);
-    annotationCtx.stroke();
-    annotationCtx.fillStyle = "#0ea5e9";
-    annotationCtx.beginPath();
-    annotationCtx.arc(line.start.x, line.start.y, annotationCtx.lineWidth, 0, Math.PI * 2);
-    annotationCtx.fill();
-    annotationCtx.beginPath();
-    annotationCtx.arc(line.end.x, line.end.y, annotationCtx.lineWidth, 0, Math.PI * 2);
-    annotationCtx.fill();
-  });
+  annotationCtx.fillStyle = "#0ea5e9";
+  annotationCtx.beginPath();
+  annotationCtx.arc(line.start.x, line.start.y, annotationCtx.lineWidth, 0, Math.PI * 2);
+  annotationCtx.fill();
+  annotationCtx.beginPath();
+  annotationCtx.arc(line.end.x, line.end.y, annotationCtx.lineWidth, 0, Math.PI * 2);
+  annotationCtx.fill();
 }
 
 function normalizeLine(line) {
@@ -396,47 +351,52 @@ function normalizeLine(line) {
 }
 
 function updateSubmissionPayload() {
-  if (completedLines.length !== 2 || !frameCaptured || !currentClip) {
+  if (!activeLine || !frameCaptured || !currentClip) {
     latestPayload = null;
     submitAnnotationBtn.disabled = true;
     if (frameCaptured && submissionConfig.endpoint) {
-      submissionStatus.textContent = participantIdValue
-        ? `Draw exactly two lines on the frozen frame (${completedLines.length} drawn).`
-        : "Enter your participant ID above before submitting.";
+      submissionStatus.textContent = "Draw the incision and release to submit.";
     }
     return;
   }
-  
-  const incisionDetails = completedLines.map(line => {
-      const lengthPixels = Math.hypot(line.end.x - line.start.x, line.end.y - line.start.y);
-      return {
-          normalized: normalizeLine(line),
-          pixels: {
-              start: { x: Number(line.start.x.toFixed(2)), y: Number(line.start.y.toFixed(2)) },
-              end: { x: Number(line.end.x.toFixed(2)), y: Number(line.end.y.toFixed(2)) },
-              length: Number(lengthPixels.toFixed(2)),
-          }
-      };
-  });
-  
-  const normalizedIncisionLines = incisionDetails.map(d => d.normalized);
-  const filenameHint = getFilenameHint();
 
-  latestPayload = {
+  const frameTime = Number((video.currentTime || video.duration || 0).toFixed(3));
+  const normalizedLine = normalizeLine(activeLine);
+  const lengthPixels = Math.hypot(
+    activeLine.end.x - activeLine.start.x,
+    activeLine.end.y - activeLine.start.y
+  );
+
+  const startPixels = {
+    x: Number(activeLine.start.x.toFixed(2)),
+    y: Number(activeLine.start.y.toFixed(2)),
+  };
+  const endPixels = {
+    x: Number(activeLine.end.x.toFixed(2)),
+    y: Number(activeLine.end.y.toFixed(2)),
+  };
+
+  const payload = {
     clipId: currentClip.id,
     clipLabel: currentClip.label,
     videoSrc: currentClip.src,
-    capturedFrameTime: capturedFrameTimeValue,
-    incisions: normalizedIncisionLines,
-    incisionDetails: incisionDetails, 
+    capturedFrameTime: frameTime,
+    incision: normalizedLine,
+    incisionPixels: {
+      start: startPixels,
+      end: endPixels,
+      length: Number(lengthPixels.toFixed(2)),
+    },
     canvasSize: { width: annotationCanvas.width, height: annotationCanvas.height },
     generatedAt: new Date().toISOString(),
-    participantId: participantIdValue || "",
-    filenameHint,
   };
 
-  if (!submissionConfig.endpoint || !participantIdValue) {
+  latestPayload = payload;
+
+  if (!submissionConfig.endpoint) {
     submitAnnotationBtn.disabled = true;
+    submissionStatus.textContent =
+      "Investigator submission endpoint not configured. Update clip-config.js.";
     return;
   }
 
@@ -446,139 +406,133 @@ function updateSubmissionPayload() {
   submissionStatus.textContent = "Ready to submit. Tap the button to send your annotation.";
 }
 
-// --- INPUT HANDLING ---
-
-function handlePointerDown(evt) {
-  if (!frameCaptured) {
-    showToast("Final frame still loading. Please wait a moment before drawing.");
-    return;
-  }
-  if (completedLines.length >= 2) {
-      showToast("Two lines already drawn. Tap 'Clear Line(s)' to restart.");
-      return;
-  }
-  evt.preventDefault();
-  pointerDown = true;
-  const start = getPointerPosition(evt);
-  activeDrawingLine = { start, end: start };
-  drawLine();
+function buildCsvFormBody() {
+  const participant = getParticipantMeta();
+  const nowIso = new Date().toISOString();
+  const flat = new URLSearchParams();
+  // Participant-level fields (what you want in the CSV)
+  if (participant.Name) flat.set("Name", participant.Name);
+  if (participant.Institution) flat.set("Institution", participant.Institution);
+  if (participant.Specialty) flat.set("Specialty", participant.Specialty);
+  if (participant.Board) flat.set("Board", participant.Board);
+  if (participant.Practice) flat.set("Practice", participant.Practice);
+  if (participant.Volume) flat.set("Volume", participant.Volume);
+  // Preserve optional existing scoring fields if provided upstream
+  if (participant.Parkland) flat.set("Parkland", participant.Parkland);
+  if (participant.Nassar) flat.set("Nassar", participant.Nassar);
+  // Clip + submission fields
+  if (currentClip?.id) flat.set("ClipID", currentClip.id);
+  if (currentClip?.label) flat.set("ClipLabel", currentClip.label);
+  flat.set("SubmittedAt", nowIso);
+  return flat.toString();
 }
 
-function handlePointerMove(evt) {
-  if (!pointerDown || !activeDrawingLine) return;
-  evt.preventDefault();
-  activeDrawingLine.end = getPointerPosition(evt);
-  drawLine();
-}
-
-function handlePointerUp(evt) {
-  if (!pointerDown || !activeDrawingLine) return;
-  if (evt.type === "mouseleave") {
-    pointerDown = false;
-    return;
+async function mirrorToCsvEndpoint() {
+  if (!csvMirrorConfig?.endpoint) return;
+  try {
+    const body = buildCsvFormBody();
+    await fetch(csvMirrorConfig.endpoint, {
+      method: csvMirrorConfig.method || "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        ...(csvMirrorConfig.headers || {}),
+      },
+      body,
+      mode: csvMirrorConfig.mode || "cors",
+      credentials: csvMirrorConfig.credentials || "omit",
+    });
+  } catch (e) {
+    console.warn("CSV mirror failed:", e);
   }
-  evt.preventDefault();
-  pointerDown = false;
-  activeDrawingLine.end = getPointerPosition(evt);
-  completedLines.push(activeDrawingLine);
-  activeDrawingLine = null;
-  drawLine();
-  clearLineBtn.disabled = false;
-  
-  if (completedLines.length === 2) {
-      annotationStatus.textContent = "Two lines recorded. Submit below.";
-  } else {
-      annotationStatus.textContent = `Line recorded. Draw ${2 - completedLines.length} more.`;
-  }
-  updateSubmissionPayload();
-}
-
-function clearLine() {
-  activeDrawingLine = null;
-  completedLines = [];
-  pointerDown = false;
-  annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  annotationStatus.textContent = "Final frame ready. Draw your two lines for the safety corridor.";
-  clearLineBtn.disabled = true;
-  updateSubmissionPayload();
 }
 
 async function submitAnnotation() {
-  if (!latestPayload || !submissionConfig.endpoint) return;
+  if (!latestPayload) {
+    showToast("Draw the incision before submitting.");
+    return;
+  }
+
+  if (!submissionConfig.endpoint) {
+    showToast("Submission endpoint missing. Update clip-config.js.");
+    return;
+  }
+
   if (submissionInFlight) return;
 
   submissionInFlight = true;
   submitAnnotationBtn.disabled = true;
   submissionStatus.textContent = "Submitting annotation…";
 
+  const method = submissionConfig.method || "POST";
   const headers = { ...(submissionConfig.headers || {}) };
-  if (!Object.keys(headers).some(k => k.toLowerCase() === 'content-type')) {
-     headers["Content-Type"] = "application/json";
+  let shouldSetDefaultContentType = true;
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === "content-type") {
+      shouldSetDefaultContentType = false;
+      if (headers[key] === null) {
+        delete headers[key];
+      }
+    }
+  }
+  if (shouldSetDefaultContentType) {
+    headers["Content-Type"] = "application/json";
   }
 
-  const csvContent = collectFormDataAsCSV();
-  const wrapperKey = (submissionConfig.bodyWrapper && submissionConfig.bodyWrapper !== "none") 
-                     ? submissionConfig.bodyWrapper : "annotation";
+  const additionalFields = submissionConfig.additionalFields || {};
+  // Also merge participant meta into JSON (keeps JSON "perfect" and adds fields openly)
+  const participant = getParticipantMeta();
 
-  const body = submissionConfig.bodyWrapper === "none" 
-    ? { ...buildAdditionalFields(getFilenameHint()), ...latestPayload, csv_form_data: csvContent }
-    : { ...buildAdditionalFields(getFilenameHint()), [wrapperKey]: latestPayload, csv_form_data: csvContent };
+  let bodyWrapper;
+  if (submissionConfig.bodyWrapper === "none") {
+    bodyWrapper = { ...additionalFields, ...participant, ...latestPayload };
+  } else {
+    const key =
+      typeof submissionConfig.bodyWrapper === "string" && submissionConfig.bodyWrapper
+        ? submissionConfig.bodyWrapper
+        : "annotation";
+    bodyWrapper = { ...additionalFields, ...participant, [key]: latestPayload };
+  }
+
+  const fetchOptions = {
+    method,
+    headers,
+    body: JSON.stringify(bodyWrapper),
+  };
+
+  if (submissionConfig.mode) {
+    fetchOptions.mode = submissionConfig.mode;
+  }
+  if (submissionConfig.credentials) {
+    fetchOptions.credentials = submissionConfig.credentials;
+  }
 
   try {
-    const response = await fetch(submissionConfig.endpoint, {
-        method: submissionConfig.method || "POST",
-        headers,
-        body: JSON.stringify(body)
-    });
-    if (!response.ok) throw new Error("Submission failed");
+    const response = await fetch(submissionConfig.endpoint, fetchOptions);
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+    // Fire-and-forget CSV mirror (flat, form-encoded)
+    await mirrorToCsvEndpoint();
     submissionStatus.textContent = "Annotation submitted. Thank you!";
     showToast("Annotation sent to investigator.");
   } catch (error) {
     submissionStatus.textContent = "Submission failed. Please try again.";
     submitAnnotationBtn.disabled = false;
-    showToast("Unable to submit annotation. Check connection.");
+    showToast("Unable to submit annotation. Check your connection and try again.");
+    console.error(error);
   } finally {
     submissionInFlight = false;
   }
 }
 
-// --- HELPERS ---
-
-function applyParticipantId(rawValue) {
-  participantIdValue = (rawValue || "").trim();
-  participantIdStatus.textContent = participantIdValue 
-    ? "Participant ID recorded. Continue with the steps below."
-    : "Enter the ID provided by the study team. This is required before submitting your annotation.";
-  updateSubmissionPayload();
-}
-
-function getFilenameHint() {
-  const clipPart = currentClip?.id ? String(currentClip.id) : "annotation";
-  return participantIdValue ? `${participantIdValue}_${clipPart}.json` : `${clipPart}.json`;
-}
-
-function buildAdditionalFields(filenameHint) {
-  const fields = { ...baseAdditionalFields };
-  if (participantIdValue) {
-    fields.studyId = participantIdValue;
-    fields.participantId = participantIdValue;
-  }
-  if (filenameHint) fields.filenameHint = filenameHint;
-  return fields;
-}
-
-// --- EVENT LISTENERS ---
-
 clipSelect.addEventListener("change", loadSelectedClip);
 replayBtn.addEventListener("click", handleReplay);
+video.addEventListener("loadedmetadata", handleVideoMetadata);
 video.addEventListener("loadeddata", handleVideoLoaded);
-video.addEventListener("error", handleVideoError);
-video.addEventListener("play", handleVideoPlay);
-video.addEventListener("timeupdate", handleVideoTimeUpdate);
+video.addEventListener("error", handleVideoError, { once: false });
 video.addEventListener("ended", handleVideoEnded);
 clearLineBtn.addEventListener("click", clearLine);
 submitAnnotationBtn.addEventListener("click", submitAnnotation);
-participantIdInput.addEventListener("input", (e) => applyParticipantId(e.target.value));
 
 if (window.PointerEvent) {
   annotationCanvas.addEventListener("pointerdown", handlePointerDown, { passive: false });
@@ -590,11 +544,12 @@ if (window.PointerEvent) {
   annotationCanvas.addEventListener("mousedown", handlePointerDown, { passive: false });
   annotationCanvas.addEventListener("mousemove", handlePointerMove, { passive: false });
   annotationCanvas.addEventListener("mouseup", handlePointerUp, { passive: false });
+  annotationCanvas.addEventListener("mouseleave", handlePointerUp, { passive: false });
   annotationCanvas.addEventListener("touchstart", handlePointerDown, { passive: false });
   annotationCanvas.addEventListener("touchmove", handlePointerMove, { passive: false });
   annotationCanvas.addEventListener("touchend", handlePointerUp, { passive: false });
+  annotationCanvas.addEventListener("touchcancel", handlePointerUp, { passive: false });
 }
 
 const availableClips = getClips();
 populateClipSelect(availableClips);
-applyParticipantId(participantIdInput.value);
