@@ -202,7 +202,15 @@ function resetAnnotationState() {
   submissionInFlight = false;
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   overlayCtx.clearRect(0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
-  annotationCanvas.style.backgroundImage = "";
+  try {
+    const dataUrl = finalFrameCanvas.toDataURL("image/png");
+    annotationCanvas.style.backgroundImage = `url(${dataUrl})`;
+    annotationCanvas.style.backgroundSize = "contain";
+    annotationCanvas.style.backgroundRepeat = "no-repeat";
+    annotationCanvas.style.backgroundPosition = "center";
+  } catch (err) {
+    annotationCanvas.style.backgroundImage = "none";
+  }
   annotationStatus.textContent =
     "Final frame will appear below shortly. You can keep watching the clip while it prepares.";
   clearLineBtn.disabled = true;
@@ -310,25 +318,31 @@ function handleHelperError() {
       "Final frame will appear below once the clip finishes playing. If it does not, replay the clip.";
   }
 }
-
 function captureFrameImage(source, frameTimeValue) {
   if (!source.videoWidth || !source.videoHeight) {
     return false;
   }
 
   const firstCapture = !frameCaptured;
-
-  // Always resize canvas based on actual video dimensions
   resizeCanvases(source.videoWidth, source.videoHeight);
-
-  // Draw image onto final frame canvas
-  overlayCtx.clearRect(0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
+  
+  // 1. Draw the image to the bottom canvas (finalFrame)
   overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
-
-  // Clear annotation canvas (drawing layer)
+  
+  // 2. Clear the top canvas (annotationCanvas) so it is transparent
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
 
-  // ⚠️ Set background image only if supported
+  // --- DELETE OR COMMENT OUT THESE LINES ---
+  // try {
+  //   const dataUrl = finalFrameCanvas.toDataURL("image/png");
+  //   annotationCanvas.style.backgroundImage = `url(${dataUrl})`;
+  //   annotationCanvas.style.backgroundSize = "contain";
+  //   annotationCanvas.style.backgroundRepeat = "no-repeat";
+  //   annotationCanvas.style.backgroundPosition = "center";
+  // } catch (error) { ... }
+  // -----------------------------------------
+
+  // 3. Remove the background style clean-up
   try {
     const dataUrl = finalFrameCanvas.toDataURL("image/png");
     annotationCanvas.style.backgroundImage = `url(${dataUrl})`;
@@ -336,30 +350,32 @@ function captureFrameImage(source, frameTimeValue) {
     annotationCanvas.style.backgroundRepeat = "no-repeat";
     annotationCanvas.style.backgroundPosition = "center";
   } catch (err) {
-    // Do nothing – likely a CORS issue on some devices
     annotationCanvas.style.backgroundImage = "none";
-  }
+  } 
 
   frameCaptured = true;
   canvasContainer.hidden = false;
+  // ... rest of the function remains the same
 
+  // --- START CHANGES FOR MULTI-LINE ---
   annotationStatus.textContent =
     "Final frame ready. Review the clip above and draw your two safety lines when ready.";
-
+  // --- END CHANGES FOR MULTI-LINE ---
   if (firstCapture) {
-    videoStatus.textContent = video.paused
-      ? "Final frame captured. Replay the clip if you need another look."
-      : "Final frame captured below. You can keep watching or replay the clip when ready.";
+    if (video.paused) {
+      videoStatus.textContent = "Final frame captured. Replay the clip if you need another look.";
+    } else {
+      videoStatus.textContent =
+        "Final frame captured below. You can keep watching or replay the clip when ready.";
+    }
   }
-
   replayBtn.disabled = false;
-
-  const numericTime = Number(((frameTimeValue ?? source.currentTime ?? 0) || 0).toFixed(3));
+  const numericTime = Number(
+    ((frameTimeValue ?? source.currentTime ?? 0) || 0).toFixed(3)
+  );
   capturedFrameTimeValue = Number.isFinite(numericTime) ? numericTime : 0;
-
   return true;
 }
-
 
 function freezeOnFinalFrame() {
   if (!frameCaptured) {
