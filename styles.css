@@ -148,47 +148,42 @@ body {
   color: var(--text-muted);
 }
 
+/* --- UPDATED CANVAS CONTAINER CSS --- */
 .canvas-container {
   position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: rgba(15, 23, 42, 0.5);
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  overflow: hidden;
+  display: grid;
+  /* This defines a single named area "stack" */
+  grid-template-areas: "stack"; 
+  gap: 0.5rem;
 }
 
 .canvas-container canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
+  /* Both canvases (image and drawing) occupy the "stack" area */
+  grid-area: stack;
   width: 100%;
-  height: 100%;
+  height: auto; /* REQUIRED for correct aspect ratio scaling in grid */
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
   touch-action: none;
-  display: block;
 }
 
-#finalFrame {
-  z-index: 1;
-}
-
+/* Ensure the drawing layer sits on top */
 #annotationCanvas {
   z-index: 10;
+  position: relative;
 }
 
+/* Ensure the hints/text sit below the stack, not inside the stack area */
+.canvas-container p {
+  /* Force the hint text into a new row below the canvas stack */
+  grid-row: 2; 
+}
+/* ------------------------------------ */
+
 .canvas-hint {
-  position: absolute;
-  bottom: 1rem;
-  left: 1rem;
-  right: 1rem;
   margin: 0;
   font-size: 0.9rem;
   color: var(--text-muted);
-  z-index: 5;
-  background: rgba(15, 23, 42, 0.8);
-  padding: 0.5rem;
-  border-radius: 8px;
-  backdrop-filter: blur(10px);
 }
 
 .help {
@@ -275,12 +270,5 @@ button:not(:disabled):active {
 
   button {
     width: 100%;
-  }
-
-  .canvas-hint {
-    font-size: 0.85rem;
-    bottom: 0.75rem;
-    left: 0.75rem;
-    right: 0.75rem;
   }
 }
