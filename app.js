@@ -318,12 +318,12 @@ function drawLine() {
   linesToDraw.forEach(line => {
     if (!line) return;
     
-    // QUALITY FIX: Increased thickness multiplier from 0.004 to 0.008
-    // This ensures the line looks solid even when scaled down on mobile screens.
+    // FIX: Reduced line width significantly (from 0.008 to 0.0025)
+    // This solves the "zoomed/distorted" appearance
     annotationCtx.strokeStyle = "#38bdf8";
-    annotationCtx.lineWidth = Math.max(4, annotationCanvas.width * 0.008);
+    annotationCtx.lineWidth = Math.max(2, annotationCanvas.width * 0.0025);
     annotationCtx.lineCap = "round";
-    annotationCtx.lineJoin = "round"; // Smooth corners
+    annotationCtx.lineJoin = "round";
     
     annotationCtx.beginPath();
     annotationCtx.moveTo(line.start.x, line.start.y);
