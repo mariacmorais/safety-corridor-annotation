@@ -25,7 +25,7 @@ const annotationCtx = annotationCanvas.getContext("2d");
 
 // State Variables
 let frameCaptured = false;
-let finalFrameBuffered = false; // Tracks if we have a valid image waiting
+let finalFrameBuffered = false; 
 let currentClip = null;
 let activeDrawingLine = null; 
 let completedLines = []; 
@@ -33,6 +33,7 @@ let pointerDown = false;
 let latestPayload = null;
 let submissionInFlight = false;
 let capturedFrameTimeValue = 0;
+let isPreloading = false; // NEW: To track the pre-fetch sequence
 
 // --- UTILITY FUNCTIONS ---
 
@@ -139,12 +140,14 @@ function loadSelectedClip() {
     poster: option.dataset.poster || "",
   };
 
+  // Ensure canvas is hidden until we capture the frame
   canvasContainer.hidden = true;
+  
+  // Disable controls during preload to prevent user interference
   video.removeAttribute("controls");
+  
   video.setAttribute("playsinline", "");
   video.setAttribute("webkit-playsinline", "");
-  
-  // CRITICAL: Set crossOrigin BEFORE src to avoid tainted canvas issues
   video.crossOrigin = "anonymous";
   
   if (currentClip.poster) {
@@ -162,6 +165,7 @@ function loadSelectedClip() {
 function resetAnnotationState() {
   frameCaptured = false;
   finalFrameBuffered = false;
+  isPreloading = false;
   activeDrawingLine = null;
   completedLines = [];
   pointerDown = false;
@@ -173,8 +177,7 @@ function resetAnnotationState() {
   
   annotationCanvas.style.backgroundImage = "";
   
-  annotationStatus.textContent =
-    "Final frame will appear below shortly. You can keep watching the clip while it prepares.";
+  annotationStatus.textContent = "Preparing final frame...";
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
   
@@ -192,7 +195,7 @@ function resetAnnotationState() {
 // --- CORE CAPTURE LOGIC ---
 
 function resizeCanvases(videoWidth, videoHeight) {
-  // FIX FOR MOBILE: Cap max width to 1920px to prevent memory crashes
+  // FIX FOR MOBILE: Cap max width to 1920px
   const MAX_WIDTH = 1920;
   let width = videoWidth;
   let height = videoHeight;
@@ -203,9 +206,6 @@ function resizeCanvases(videoWidth, videoHeight) {
     height = videoHeight * ratio;
   }
 
-  // PERFORMANCE OPTIMIZATION: 
-  // Only resize (which clears canvas) if dimensions actually change.
-  // This is crucial for smooth mirroring.
   if (finalFrameCanvas.width !== width || finalFrameCanvas.height !== height) {
     finalFrameCanvas.width = width;
     finalFrameCanvas.height = height;
@@ -214,7 +214,7 @@ function resizeCanvases(videoWidth, videoHeight) {
   }
 }
 
-// This function just draws the pixels; it doesn't change the UI state.
+// Draws the current video frame to the bottom canvas (STATIC IMAGE)
 function bufferFrame(source) {
   if (!source.videoWidth || !source.videoHeight) return false;
 
@@ -223,19 +223,14 @@ function bufferFrame(source) {
   // Draw directly to the bottom canvas
   overlayCtx.drawImage(source, 0, 0, finalFrameCanvas.width, finalFrameCanvas.height);
   
-  // Clear top canvas to ensure transparency
-  // (Only need to do this if we suspect artifacts, but for safety we do it)
-  // Note: If we are mirroring rapidly, we might skip clearing *every* frame for speed,
-  // but clearing is fast enough on modern devices.
-  
-  // Mobile safety: ensure no background image
+  // Mobile safety
   annotationCanvas.style.backgroundImage = "";
 
   finalFrameBuffered = true;
   return true;
 }
 
-// This function locks the frame and enables interaction
+// Reveals the static canvas to the user
 function revealCapturedFrame() {
   if (!finalFrameBuffered) return;
 
@@ -243,83 +238,74 @@ function revealCapturedFrame() {
   canvasContainer.hidden = false;
   
   annotationStatus.textContent =
-    "Final frame ready. Review the clip above and draw your two safety lines when ready.";
-  
-  if (video.paused) {
-    videoStatus.textContent = "Clip complete. The frozen frame below is ready for annotation.";
-  }
+    "Final frame ready. You can watch the clip above, and draw on this frame below.";
   
   replayBtn.disabled = false;
+}
+
+// --- PRELOAD SEQUENCE (The Magic Fix) ---
+
+function handleVideoLoadedMetadata() {
+  const duration = video.duration;
+  // Sanity check: if infinite or NaN (streaming), we can't seek to end.
+  if (!Number.isFinite(duration) || duration <= 0) return;
+
+  // Start the Pre-load Dance
+  isPreloading = true;
+  videoStatus.textContent = "Initializing final frame...";
+
+  // 1. Seek to the very end (minus small buffer for safety)
+  const target = Math.max(0, duration - 0.1);
   
-  // Lock in the time
-  const numericTime = Number(((video.currentTime || 0)).toFixed(3));
-  capturedFrameTimeValue = Number.isFinite(numericTime) ? numericTime : 0;
+  const onSeekEnd = () => {
+     // 2. Capture the frame immediately
+     bufferFrame(video);
+     
+     // 3. Lock in the capture time
+     const numericTime = Number(target.toFixed(3));
+     capturedFrameTimeValue = Number.isFinite(numericTime) ? numericTime : 0;
+
+     // 4. Show it to the user!
+     revealCapturedFrame();
+
+     // 5. Seek back to start so user can watch
+     const onSeekStart = () => {
+        isPreloading = false;
+        videoStatus.textContent = "Ready. Press play to watch.";
+        video.controls = true;
+        video.setAttribute("controls", "");
+     };
+     
+     video.addEventListener("seeked", onSeekStart, { once: true });
+     video.currentTime = 0;
+  };
+
+  // Trigger the jump
+  video.addEventListener("seeked", onSeekEnd, { once: true });
+  video.currentTime = target;
 }
 
 function handleVideoTimeUpdate() {
-  if (frameCaptured) return;
-  if (!video.duration) return;
-
-  // NEW STRATEGY: LIVE MIRROR
-  // We buffer the frame continuously while playing.
-  // This allows the user to see the canvas working IMMEDIATELY.
-  bufferFrame(video);
-     
-  // Unhide immediately so user sees it updating in real-time
-  if (canvasContainer.hidden) {
-      canvasContainer.hidden = false;
-      annotationStatus.textContent = "Syncing frame... (Wait for clip to end to draw)";
-  }
+  // No operations needed during playback anymore. 
+  // The frame is already captured statically.
 }
 
 function handleVideoEnded() {
-  if (frameCaptured) return;
-
+  if (isPreloading) return; 
+  // Video finished playing naturally.
+  videoStatus.textContent = "Clip complete. The final frame is below.";
   video.controls = true;
   video.setAttribute("controls", "");
-
-  // If our rolling capture worked, we already have the image. Lock it now.
-  if (finalFrameBuffered) {
-    revealCapturedFrame();
-  } else {
-    // Fallback for immediate scrubbing to end
-    const target = Math.max(0, video.duration - 0.1);
-    
-    videoStatus.textContent = "Capturing final frame...";
-    
-    const onSeeked = () => {
-      if (bufferFrame(video)) {
-        revealCapturedFrame();
-      } else {
-        videoStatus.textContent = "Could not capture frame. Please press Replay.";
-      }
-    };
-
-    video.addEventListener("seeked", onSeeked, { once: true });
-    video.currentTime = target;
-  }
-}
-
-function handleVideoLoaded() {
-  videoStatus.textContent = "Clip loaded. Tap play to begin.";
-  video.controls = true;
-  video.setAttribute("controls", "");
-  video.play().catch(() => {
-    videoStatus.textContent = "Clip loaded. Press play to begin.";
-  });
 }
 
 function handleVideoPlay() {
-  videoStatus.textContent = frameCaptured
-    ? "Replaying clip. The final frame remains available below."
-    : "Watching clip…";
+  if (isPreloading) return;
+  videoStatus.textContent = "Watching clip…";
 }
 
 function handleVideoError() {
   let message = "Clip failed to load. ";
-  if (currentClip?.src) {
-      message += "Check URL. ";
-  }
+  if (currentClip?.src) message += "Check URL. ";
   videoStatus.textContent = message;
   showToast(message);
 }
@@ -327,23 +313,10 @@ function handleVideoError() {
 function handleReplay() {
   if (!currentClip) return;
   
-  annotationStatus.textContent =
-    "Final frame remains below. Review the clip again and adjust your line if needed.";
+  // Since we already have the frame captured from the start,
+  // Replay just means playing the video again. We do NOT clear the canvas.
   
-  activeDrawingLine = null;
-  completedLines = [];
-  annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  clearLineBtn.disabled = true;
-  submitAnnotationBtn.disabled = true;
-  
-  updateSubmissionPayload();
-  
-  if (submissionConfig.endpoint) {
-    submissionStatus.textContent = participantIdValue
-      ? "Draw two lines on the frozen frame to enable submission."
-      : "Enter your participant ID above before submitting.";
-  }
-
+  videoStatus.textContent = "Replaying clip...";
   video.currentTime = 0;
   video.play().catch(() => {
     videoStatus.textContent = "Clip reset. Press play to watch again.";
@@ -403,6 +376,7 @@ function normalizeLine(line) {
 }
 
 function updateSubmissionPayload() {
+  // User can only submit if lines are drawn AND we have the frame time
   if (completedLines.length !== 2 || !frameCaptured || !currentClip) {
     latestPayload = null;
     submitAnnotationBtn.disabled = true;
@@ -457,7 +431,7 @@ function updateSubmissionPayload() {
 
 function handlePointerDown(evt) {
   if (!frameCaptured) {
-    showToast("Final frame still loading. Please wait a moment before drawing.");
+    showToast("Final frame loading...");
     return;
   }
   if (completedLines.length >= 2) {
@@ -505,7 +479,8 @@ function clearLine() {
   completedLines = [];
   pointerDown = false;
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  annotationStatus.textContent = "Final frame ready. Draw your two lines for the safety corridor.";
+  // Do NOT clear the background image (finalFrameCanvas), only the lines (annotationCanvas)
+  annotationStatus.textContent = "Frame ready. Draw your two lines for the safety corridor.";
   clearLineBtn.disabled = true;
   updateSubmissionPayload();
 }
@@ -578,7 +553,10 @@ function buildAdditionalFields(filenameHint) {
 
 clipSelect.addEventListener("change", loadSelectedClip);
 replayBtn.addEventListener("click", handleReplay);
-video.addEventListener("loadeddata", handleVideoLoaded);
+
+// Use loadedmetadata for the pre-fetch sequence
+video.addEventListener("loadedmetadata", handleVideoLoadedMetadata);
+
 video.addEventListener("error", handleVideoError);
 video.addEventListener("play", handleVideoPlay);
 video.addEventListener("timeupdate", handleVideoTimeUpdate);
