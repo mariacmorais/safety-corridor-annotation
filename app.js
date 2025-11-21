@@ -25,10 +25,10 @@ const annotationCtx = annotationCanvas.getContext("2d");
 
 let frameCaptured = false;
 let currentClip = null;
-// --- START CHANGES FOR MULTI-LINE ---
-let activeDrawingLine = null; // The line currently being drawn
-let completedLines = []; // Array to store finished lines (up to 2)
-// --- END CHANGES FOR MULTI-LINE ---
+// --- MULTI-LINE VARIABLES ---
+let activeDrawingLine = null; 
+let completedLines = []; 
+// ----------------------------
 let pointerDown = false;
 let latestPayload = null;
 let submissionInFlight = false;
@@ -193,10 +193,8 @@ function handleVideoError() {
 function resetAnnotationState() {
   teardownHelperVideo();
   frameCaptured = false;
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine = null;
   completedLines = [];
-  // --- END CHANGES FOR MULTI-LINE ---
   pointerDown = false;
   latestPayload = null;
   submissionInFlight = false;
@@ -213,11 +211,9 @@ function resetAnnotationState() {
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
   if (submissionConfig.endpoint) {
-    // --- START CHANGES FOR MULTI-LINE ---
     submissionStatus.textContent = participantIdValue
       ? "Draw two lines on the frozen frame to enable submission."
       : "Enter your participant ID above before submitting.";
-    // --- END CHANGES FOR MULTI-LINE ---
   } else {
     submissionStatus.textContent =
       "Investigator submission endpoint not configured. Update clip-config.js.";
@@ -225,7 +221,21 @@ function resetAnnotationState() {
   capturedFrameTimeValue = 0;
 }
 
-function resizeCanvases(width, height) {
+// --- FIX FOR MOBILE MEMORY CRASHES: LIMIT CANVAS SIZE ---
+function resizeCanvases(videoWidth, videoHeight) {
+  // Cap width to 1920px (1080p). 
+  // Mobile browsers often crash with 4K (3840px) canvases.
+  const MAX_WIDTH = 1920;
+  
+  let width = videoWidth;
+  let height = videoHeight;
+
+  if (width > MAX_WIDTH) {
+    const ratio = MAX_WIDTH / width;
+    width = MAX_WIDTH;
+    height = videoHeight * ratio;
+  }
+
   finalFrameCanvas.width = width;
   finalFrameCanvas.height = height;
   annotationCanvas.width = width;
@@ -350,10 +360,9 @@ function captureFrameImage(source, frameTimeValue) {
   frameCaptured = true;
   canvasContainer.hidden = false;
 
-  // --- START CHANGES FOR MULTI-LINE ---
   annotationStatus.textContent =
     "Final frame ready. Review the clip above and draw your two safety lines when ready.";
-  // --- END CHANGES FOR MULTI-LINE ---
+
   if (firstCapture) {
     if (video.paused) {
       videoStatus.textContent = "Final frame captured. Replay the clip if you need another look.";
@@ -371,25 +380,32 @@ function captureFrameImage(source, frameTimeValue) {
 }
 
 function freezeOnFinalFrame() {
-  if (!frameCaptured) {
-    // MOBILE FIX: Do not capture exact duration, as it may be a black 'end' frame.
-    // Subtract 0.1 seconds to catch the last visible image.
-    const duration = Number.isFinite(video.duration) ? video.duration : 0;
-    const captureTime = duration > 0.1 ? duration - 0.1 : (video.currentTime || 0);
+  if (frameCaptured) return;
 
-    const success = captureFrameImage(video, captureTime);
-    if (!success) {
-      return;
+  // SAFETY FALLBACK FOR MOBILE:
+  // If we missed the capture window while playing, the video is now at 'duration'.
+  // On mobile, capturing at exactly 'duration' often results in a BLACK frame.
+  // We must explicit seek back slightly and wait for the seek to complete.
+  
+  const duration = Number.isFinite(video.duration) ? video.duration : 0;
+  const target = Math.max(0, duration - 0.1);
+
+  videoStatus.textContent = "Capturing final frame...";
+
+  // Define a one-time listener for the seek completion
+  const onSeeked = () => {
+    const success = captureFrameImage(video, target);
+    if (success) {
+      videoStatus.textContent = "Clip complete. The frozen frame below is ready.";
+    } else {
+      videoStatus.textContent = "Clip complete. Tap replay if frame is missing.";
     }
-  } else {
-    const captureTime = Number.isFinite(video.duration)
-      ? video.duration
-      : video.currentTime || capturedFrameTimeValue;
-    const numericTime = Number(((captureTime || 0)).toFixed(3));
-    capturedFrameTimeValue = Number.isFinite(numericTime) ? numericTime : capturedFrameTimeValue;
-  }
-  videoStatus.textContent =
-    "Clip complete. The frozen frame below is ready for annotation. Use Replay to review again.";
+  };
+
+  video.addEventListener("seeked", onSeeked, { once: true });
+  
+  // Trigger the seek
+  video.currentTime = target;
 }
 
 function handleVideoLoaded() {
@@ -413,6 +429,7 @@ function handleVideoPlay() {
 }
 
 function handleVideoEnded() {
+  // Trigger the safety seek-and-capture
   freezeOnFinalFrame();
   video.controls = true;
   video.setAttribute("controls", "");
@@ -428,18 +445,18 @@ function handleVideoTimeUpdate() {
     return;
   }
 
-  // MOBILE FIX: Ensure we don't wait until the VERY end frame
+  // MOBILE FIX: Increased threshold from 0.25 to 0.5.
+  // Mobile browsers throttle 'timeupdate' events. We need a wider window
+  // to catch the frame while the video is still playing, which avoids the black-frame issue.
   const remaining = duration - video.currentTime;
-  if (remaining <= 0.25) {
-    // Capture slightly before the end
+  if (remaining <= 0.5) { 
+    // Capture slightly before the end (0.1s before)
     const success = captureFrameImage(video, duration - 0.1);
     if (!success) {
       return;
     }
-    // --- START CHANGES FOR MULTI-LINE ---
     annotationStatus.textContent =
       "Final frame ready. Review the clip above and draw your two safety lines when ready.";
-    // --- END CHANGES FOR MULTI-LINE ---
   }
 }
 
@@ -447,19 +464,15 @@ function handleReplay() {
   if (!currentClip) return;
   annotationStatus.textContent =
     "Final frame remains below. Review the clip again and adjust your line if needed.";
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine = null;
   completedLines = [];
-  // --- END CHANGES FOR MULTI-LINE ---
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   clearLineBtn.disabled = true;
   submitAnnotationBtn.disabled = true;
   if (submissionConfig.endpoint) {
-    // --- START CHANGES FOR MULTI-LINE ---
     submissionStatus.textContent = participantIdValue
       ? "Draw two lines on the frozen frame to enable submission."
       : "Enter your participant ID above before submitting.";
-    // --- END CHANGES FOR MULTI-LINE ---
   } else {
     submissionStatus.textContent =
       "Investigator submission endpoint not configured. Update clip-config.js.";
@@ -497,7 +510,6 @@ function getPointerPosition(evt) {
 function drawLine() {
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   
-  // --- START CHANGES FOR MULTI-LINE ---
   const linesToDraw = [...completedLines];
   if (activeDrawingLine) {
     linesToDraw.push(activeDrawingLine);
@@ -528,7 +540,6 @@ function drawLine() {
     annotationCtx.arc(line.end.x, line.end.y, annotationCtx.lineWidth, 0, Math.PI * 2);
     annotationCtx.fill();
   });
-  // --- END CHANGES FOR MULTI-LINE ---
 }
 
 function normalizeLine(line) {
@@ -545,7 +556,6 @@ function normalizeLine(line) {
 }
 
 function updateSubmissionPayload() {
-  // --- START CHANGES FOR MULTI-LINE ---
   // Require exactly two lines to enable submission
   if (completedLines.length !== 2 || !frameCaptured || !currentClip) {
     latestPayload = null;
@@ -603,7 +613,6 @@ function updateSubmissionPayload() {
     participantId: participantIdValue || "",
     filenameHint,
   };
-  // --- END CHANGES FOR MULTI-LINE ---
 
   latestPayload = payload;
 
@@ -632,44 +641,33 @@ function handlePointerDown(evt) {
     return;
   }
   
-  // --- START CHANGES FOR MULTI-LINE ---
   if (completedLines.length >= 2) {
       showToast("Two lines already drawn. Tap 'Clear Line(s)' to restart.");
       return;
   }
-  // --- END CHANGES FOR MULTI-LINE ---
 
   evt.preventDefault();
   pointerDown = true;
   const start = getPointerPosition(evt);
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine = { start, end: start };
   drawLine();
-  // --- END CHANGES FOR MULTI-LINE ---
 }
 
 function handlePointerMove(evt) {
-  // --- START CHANGES FOR MULTI-LINE ---
   if (!pointerDown || !activeDrawingLine) return;
-  // --- END CHANGES FOR MULTI-LINE ---
   evt.preventDefault();
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine.end = getPointerPosition(evt);
   drawLine();
-  // --- END CHANGES FOR MULTI-LINE ---
 }
 
 function handlePointerUp(evt) {
-  // --- START CHANGES FOR MULTI-LINE ---
   if (!pointerDown || !activeDrawingLine) return;
-  // --- END CHANGES FOR MULTI-LINE ---
   if (evt.type === "mouseleave") {
     pointerDown = false;
     return;
   }
   evt.preventDefault();
   pointerDown = false;
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine.end = getPointerPosition(evt);
   
   // Finalize the line
@@ -685,21 +683,16 @@ function handlePointerUp(evt) {
   } else {
       annotationStatus.textContent = `Line recorded. Draw ${2 - completedLines.length} more.`;
   }
-  // --- END CHANGES FOR MULTI-LINE ---
   updateSubmissionPayload();
 }
 
 function clearLine() {
-  // --- START CHANGES FOR MULTI-LINE ---
   activeDrawingLine = null;
   completedLines = [];
-  // --- END CHANGES FOR MULTI-LINE ---
   pointerDown = false;
   annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-  // --- START CHANGES FOR MULTI-LINE ---
   annotationStatus.textContent =
     "Final frame ready. Draw your two lines for the safety corridor.";
-  // --- END CHANGES FOR MULTI-LINE ---
   clearLineBtn.disabled = true;
   updateSubmissionPayload();
 }
