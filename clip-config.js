@@ -77,7 +77,7 @@ window.ANNOTATION_CLIPS = [
   {
     id: "clip_11",
     label: "Clip 11",
-    src: "https://github.com/mariacmorais/safety-corridor-annotation/raw/refs/heads/main/clip_11.mp4",
+    src: "https://raw.githubusercontent.com/mariacmorais/safety-corridor-annotation/main/clip_11.mp4",
     poster: "",
   },
   // Clip 12 //
